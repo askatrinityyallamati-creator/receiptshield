@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ReceiptShield — AI-Based Receipt Fraud &amp; Tampering Detection</title>
+<meta name="description" content="ReceiptShield checks whether a digital receipt or bill may have been altered: OCR extraction, item/price/tax maths validation, visual tampering analysis and a fraud risk report." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2l11 4v9c0 7-4.7 12.4-11 15C9.7 27.4 5 22 5 15V6z' fill='%232dd4bf'/%3E%3Cpath d='M11 15.5l3.4 3.4L21.5 12' stroke='%23042f2a' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://cdn.jsdelivr.net" />
+<link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+<body>
+
+<a class="skip-link" href="#detector">Skip to the detector</a>
+
+<header class="topbar">
+  <div class="wrap topbar__in">
+    <a class="brand" href="#top">
+      <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M16 2l11 4v9c0 7-4.7 12.4-11 15C9.7 27.4 5 22 5 15V6z" fill="currentColor"/>
+        <path d="M11 15.5l3.4 3.4L21.5 12" stroke="#042f2a" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="brand__name">Receipt<span>Shield</span></span>
+    </a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#detector">Detector</a>
+      <a href="#method">How it works</a>
+      <a href="#limits">Limits</a>
+    </nav>
+    <a class="btn btn--ghost btn--sm nav-cta" href="#detector">Analyse a receipt</a>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ───────────────────────── HERO ───────────────────────── -->
+  <section class="hero">
+    <div class="wrap hero__grid">
+      <div class="hero__copy">
+        <p class="eyebrow">AI-Based Receipt Fraud &amp; Tampering Detection System</p>
+        <h1>Does that receipt actually <em>add up</em>?</h1>
+        <p class="lede">
+          ReceiptShield reads a digital receipt or bill and checks whether it may have been
+          altered — and whether its information is mathematically and logically consistent.
+          It reads the items, quantities, prices, tax, discount and total with OCR, proves the
+          arithmetic, then studies the image itself for edited text, unusual fonts, spacing
+          and misalignment.
+        </p>
+        <div class="hero__cta">
+          <a class="btn btn--primary" href="#detector">Run a receipt</a>
+          <a class="btn btn--ghost" href="#method">See the seven stages</a>
+        </div>
+        <ul class="hero__facts">
+          <li><strong>Runs in your browser</strong><span>No upload, no server, no API key</span></li>
+          <li><strong>Arithmetic + pixels</strong><span>Maths checks and image forensics together</span></li>
+          <li><strong>Auditable output</strong><span>Every flag carries its evidence</span></li>
+        </ul>
+      </div>
+
+      <aside class="hero__card" aria-label="Example">
+        <div class="mini">
+          <div class="mini__head">
+            <span>Grand Total</span>
+            <span class="mini__amt" id="heroAmount">₹500.00</span>
+          </div>
+          <div class="mini__body">
+            <div><span>2 × Filter Coffee</span><span>₹300.00</span></div>
+            <div><span>1 × Sandwich</span><span>₹200.00</span></div>
+            <div class="mini__sub"><span>Subtotal</span><span>₹500.00</span></div>
+          </div>
+          <svg class="mini__pen" viewBox="0 0 90 26" aria-hidden="true">
+            <ellipse cx="58" cy="12" rx="15" ry="8" fill="rgba(45,212,191,.10)" stroke="rgba(45,212,191,.55)" stroke-dasharray="4 3"/>
+          </svg>
+          <div class="mini__flag">Edited total detected</div>
+        </div>
+        <p class="hero__card-note">₹500 altered to ₹1,500 — the item maths no longer reconciles.</p>
+      </aside>
+    </div>
+
+    <div class="wrap">
+      <ol class="pipeline" aria-label="Detection pipeline">
+        <li><span>01</span>Receipt Upload</li>
+        <li><span>02</span>OCR Extraction</li>
+        <li><span>03</span>Item / Price / Tax Detection</li>
+        <li><span>04</span>Mathematical Validation</li>
+        <li><span>05</span>Visual Tampering Analysis</li>
+        <li><span>06</span>Suspicious Information Detection</li>
+        <li><span>07</span>Fraud Risk Report</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── DETECTOR ───────────────────────── -->
+  <section class="detector" id="detector">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Run the detector</h2>
+        <p>Drop in a receipt image, load one of the built-in samples, or paste receipt text to exercise the validation engine on its own.</p>
+      </div>
+
+      <div id="banner" class="banner" role="status" hidden></div>
+
+      <div class="detector__grid">
+
+        <!-- Input column -->
+        <div class="panel panel--input">
+          <div class="panel__head">
+            <h3>1 · Provide a receipt</h3>
+          </div>
+
+          <div class="modes" role="tablist" aria-label="Input mode">
+            <button class="mode is-active" role="tab" aria-selected="true" data-mode="image" id="modeImage">Upload image</button>
+            <button class="mode" role="tab" aria-selected="false" data-mode="text" id="modeText">Paste text</button>
+          </div>
+
+          <!-- image mode -->
+          <div class="mode-panel is-active" data-panel="image">
+            <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Choose a receipt image, or drop one here">
+              <div class="dz-default" id="dzDefault">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <p class="dropzone__title">Drop a receipt image here</p>
+                <p class="dropzone__sub">PNG, JPG or WEBP · runs locally in your browser · paste from the clipboard works too</p>
+                <span class="btn btn--ghost btn--sm">Browse files</span>
+              </div>
+              <div class="dz-file" id="dzFile" hidden></div>
+              <input id="fileInput" type="file" accept="image/*" hidden />
+            </div>
+            <p class="hint" id="sampleNote" hidden></p>
+
+            <div class="samples">
+              <p class="samples__label">No receipt handy? Generate one:</p>
+              <div class="samples__row">
+                <button class="btn btn--ghost btn--sm" id="btnGenuine">Load genuine sample</button>
+                <button class="btn btn--ghost btn--sm" id="btnTampered">Load tampered sample</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- text mode -->
+          <div class="mode-panel" data-panel="text">
+            <label class="field">
+              <span class="field__label">Receipt text</span>
+              <textarea id="textInput" rows="12" spellcheck="false"
+placeholder="Grand Cafe
+Invoice: INV-2291   Date: 12/03/2026
+------------------------------------
+2 x Filter Coffee        300.00
+1 x Club Sandwich        200.00
+Subtotal                 500.00
+GST 5%                    25.00
+Grand Total              525.00"></textarea>
+            </label>
+            <div class="samples__row">
+              <button class="btn btn--ghost btn--sm" id="btnTextGenuine">Sample text — genuine</button>
+              <button class="btn btn--ghost btn--sm" id="btnTextTampered">Sample text — tampered</button>
+            </div>
+            <p class="hint">Text mode runs stages 3, 4, 6 and 7. Visual analysis (stage 5) needs an image.</p>
+          </div>
+
+          <div class="panel__foot">
+            <button class="btn btn--primary btn--wide" id="btnRun" disabled>Run detection</button>
+            <button class="btn btn--ghost btn--wide" id="btnReset" hidden>Start over</button>
+          </div>
+        </div>
+
+        <!-- Pipeline column -->
+        <div class="panel panel--progress">
+          <div class="panel__head">
+            <h3>2 · Detection pipeline</h3>
+            <span class="tag" id="runTag">idle</span>
+          </div>
+          <ol class="stages" id="stages">
+            <li data-stage="upload"><i></i><div><strong>Receipt Upload</strong><span>Image accepted and normalised</span></div></li>
+            <li data-stage="ocr"><i></i><div><strong>OCR Extraction</strong><span>Text, word boxes and confidence</span></div></li>
+            <li data-stage="parse"><i></i><div><strong>Item / Price / Tax Detection</strong><span>Fields pulled from the text</span></div></li>
+            <li data-stage="math"><i></i><div><strong>Mathematical Validation</strong><span>Line, subtotal and total arithmetic</span></div></li>
+            <li data-stage="visual"><i></i><div><strong>Visual Tampering Analysis</strong><span>Error-level, tone and typography forensics</span></div></li>
+            <li data-stage="suspicious"><i></i><div><strong>Suspicious Information Detection</strong><span>Logical and statistical anomalies</span></div></li>
+            <li data-stage="report"><i></i><div><strong>Fraud Risk Report</strong><span>Weighted score, findings, evidence</span></div></li>
+          </ol>
+          <div class="ocrbar" id="ocrbar" hidden>
+            <div class="ocrbar__meta"><span id="ocrPhase">Working…</span><span id="ocrPct">0%</span></div>
+            <div class="ocrbar__track"><div class="ocrbar__fill" id="ocrFill"></div></div>
+          </div>
+          <p class="sr-only" id="statusLive" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── RESULTS ───────────────────────── -->
+  <section class="results" id="results" hidden>
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Fraud risk report</h2>
+        <p id="reportSubtitle"></p>
+      </div>
+
+      <div class="risk">
+        <div class="risk__dial">
+          <svg viewBox="0 0 180 180" aria-hidden="true">
+            <circle class="dial__track" cx="90" cy="90" r="72"/>
+            <circle class="dial__value" id="dialValue" cx="90" cy="90" r="72"/>
+          </svg>
+          <div class="risk__dialtext">
+            <span class="risk__score" id="riskScore">0</span>
+            <span class="risk__of">/ 100 risk</span>
+          </div>
+        </div>
+        <div class="risk__body">
+          <div class="risk__band" id="riskBand">Low risk</div>
+          <p class="risk__verdict" id="riskVerdict"></p>
+          <ul class="risk__counts" id="riskCounts"></ul>
+        </div>
+      </div>
+
+      <div class="tiles">
+        <div class="tile"><span class="tile__k">OCR confidence</span><span class="tile__v" id="tileConf">—</span></div>
+        <div class="tile"><span class="tile__k">Lines read</span><span class="tile__v" id="tileLines">—</span></div>
+        <div class="tile"><span class="tile__k">Items parsed</span><span class="tile__v" id="tileItems">—</span></div>
+        <div class="tile"><span class="tile__k">Maths checks</span><span class="tile__v" id="tileChecks">—</span></div>
+        <div class="tile"><span class="tile__k">Findings</span><span class="tile__v" id="tileFlags">—</span></div>
+        <div class="tile"><span class="tile__k">Stages run</span><span class="tile__v" id="tileStages">—</span></div>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="Report views">
+        <button class="tab is-active" role="tab" aria-selected="true" data-tab="findings">Findings</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="extract">Extraction</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="math">Maths reconciliation</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="visual">Visual evidence</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="json">JSON</button>
+      </div>
+
+      <!-- findings -->
+      <div class="tabpanel is-active" data-panel="findings">
+        <div class="filters">
+          <span class="filters__label">Filter</span>
+          <button class="chip is-active" data-filter="all">All</button>
+          <button class="chip" data-filter="critical">Critical</button>
+          <button class="chip" data-filter="high">High</button>
+          <button class="chip" data-filter="medium">Medium</button>
+          <button class="chip" data-filter="low">Low</button>
+          <button class="chip" data-filter="info">Passed</button>
+        </div>
+        <div id="findingsList" class="findings"></div>
+      </div>
+
+      <!-- extraction -->
+      <div class="tabpanel" data-panel="extract">
+        <div class="split">
+          <div class="card">
+            <h4>Line items</h4>
+            <div class="tw"><table class="tbl" id="tblItems">
+              <thead><tr><th>#</th><th>Description</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Line total</th><th class="num">Conf.</th></tr></thead>
+              <tbody></tbody>
+            </table></div>
+          </div>
+          <div class="card">
+            <h4>Totals &amp; metadata</h4>
+            <dl class="kv" id="dlTotals"></dl>
+          </div>
+        </div>
+        <details class="raw">
+          <summary>Raw OCR text</summary>
+          <pre id="rawText"></pre>
+        </details>
+      </div>
+
+      <!-- maths -->
+      <div class="tabpanel" data-panel="math">
+        <div class="card">
+          <h4>Arithmetic reconciliation</h4>
+          <p class="card__note">Every equation the receipt asserts, recomputed and compared with the printed value.</p>
+          <div class="tw"><table class="tbl" id="tblMath">
+            <thead><tr><th>Check</th><th>Equation</th><th class="num">Printed</th><th class="num">Computed</th><th class="num">Δ</th><th>Result</th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <!-- visual -->
+      <div class="tabpanel" data-panel="visual">
+        <div class="card">
+          <h4>Image forensics</h4>
+          <p class="card__note" id="visualNote"></p>
+          <div class="viewer">
+            <figure><canvas id="cvOriginal"></canvas><figcaption>Original</figcaption></figure>
+            <figure><canvas id="cvEla"></canvas><figcaption>Error-level analysis (re-compression residue)</figcaption></figure>
+            <figure><canvas id="cvBoxes"></canvas><figcaption>Flagged regions &amp; typography boxes</figcaption></figure>
+          </div>
+          <div class="viewer__controls">
+            <label class="switch"><input type="checkbox" id="tglBoxes" checked /><span>Show flagged regions</span></label>
+            <label class="switch"><input type="checkbox" id="tglHeat" checked /><span>Show error-level heat</span></label>
+            <label class="switch"><input type="checkbox" id="tglText" checked /><span>Show word boxes</span></label>
+            <label class="switch"><input type="checkbox" id="tglAmp" /><span>Amplify error level ×8</span></label>
+          </div>
+          <h4 class="mt">Suspicious regions</h4>
+          <div class="tw"><table class="tbl" id="tblRegions">
+            <thead><tr><th>#</th><th>Region (x, y, w, h)</th><th>Signal</th><th class="num">Score</th><th>Why it stands out</th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <!-- json -->
+      <div class="tabpanel" data-panel="json">
+        <div class="card">
+          <div class="card__head">
+            <h4>Machine-readable report</h4>
+            <div class="card__actions">
+              <button class="btn btn--ghost btn--sm" id="btnCopyJson">Copy</button>
+              <button class="btn btn--ghost btn--sm" id="btnDownloadJson">Download .json</button>
+            </div>
+          </div>
+          <pre class="json" id="jsonOut"></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── METHOD ───────────────────────── -->
+  <section class="method" id="method">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>How the seven stages work</h2>
+        <p>ReceiptShield combines OCR, mathematical validation and image-based tampering detection instead of checking only the visual appearance of a receipt.</p>
+      </div>
+      <div class="method__grid">
+        <article class="step-card"><span class="step-card__n">01</span><h3>Receipt Upload</h3>
+          <p>The image is normalised, upscaled for legibility and kept entirely in the browser. EXIF and embedded-editor markers are inspected but never uploaded.</p></article>
+        <article class="step-card"><span class="step-card__n">02</span><h3>OCR Extraction</h3>
+          <p>A Tesseract engine runs in a web worker and returns raw text plus a word-level geometry table: bounding boxes, baselines and per-word confidence.</p></article>
+        <article class="step-card"><span class="step-card__n">03</span><h3>Item / Price / Tax Detection</h3>
+          <p>Lines are classified into items, modifiers, discounts, taxes and totals. Quantities, unit prices, percentages and currency amounts are parsed into numbers.</p></article>
+        <article class="step-card"><span class="step-card__n">04</span><h3>Mathematical Validation</h3>
+          <p>Every equation the receipt asserts gets recomputed: qty × unit against line totals, items against the subtotal, subtotal − discount + tax against the grand total.</p></article>
+        <article class="step-card"><span class="step-card__n">05</span><h3>Visual Tampering Analysis</h3>
+          <p>Error-level analysis exposes re-compression residue from pasted regions, tone mapping spots patches whose background does not match, and typography metrics catch odd font sizes, baselines and spacing.</p></article>
+        <article class="step-card"><span class="step-card__n">06</span><h3>Suspicious Information Detection</h3>
+          <p>Logic and statistics check the rest: amount columns that stop aligning, duplicate lines, missing tax, implausible rates, round-number edits and low-confidence clusters.</p></article>
+        <article class="step-card"><span class="step-card__n">07</span><h3>Fraud Risk Report</h3>
+          <p>Findings are weighted by severity into a 0–100 risk score, then presented with the evidence behind each one and an exportable JSON payload.</p></article>
+      </div>
+
+      <div class="innovate">
+        <h3>Innovation</h3>
+        <p>It combines <strong>OCR</strong>, <strong>mathematical validation</strong> and <strong>image-based tampering detection</strong> instead of checking only the visual appearance of a receipt, making it useful for expense verification and fraud detection.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── LIMITS ───────────────────────── -->
+  <section class="limits" id="limits">
+    <div class="wrap">
+      <div class="section-head"><h2>What this can and cannot claim</h2></div>
+      <div class="limits__grid">
+        <div class="card">
+          <h4>It is evidence, not proof</h4>
+          <p>ReceiptShield is a heuristic triage tool. A flagged receipt is a reason to look closer, not a finding of fraud. Compression, scanning, glare and phone cameras all create artefacts that resemble tampering.</p>
+        </div>
+        <div class="card">
+          <h4>Where it is strongest</h4>
+          <p>Edited amounts, quantities or totals that break the arithmetic; text pasted from another font; patches whose background tone or noise does not match; and files that were re-saved by an image editor.</p>
+        </div>
+        <div class="card">
+          <h4>Where it is blind</h4>
+          <p>A forger who re-types the whole receipt in one font, keeps the arithmetic consistent and exports a clean PNG leaves little trace. Very low-resolution or heavily compressed receipts defeat the pixel-level stages.</p>
+        </div>
+        <div class="card">
+          <h4>Privacy</h4>
+          <p>Everything runs client-side. The receipt image is read locally through a canvas, the OCR engine is fetched from a CDN on first use, and nothing is transmitted to or stored on a server.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="wrap footer__in">
+    <div>
+      <p class="footer__brand">ReceiptShield</p>
+      <p class="footer__note">AI-based receipt fraud &amp; tampering detection. Runs fully in the browser.</p>
+    </div>
+    <p class="footer__meta">OCR powered by Tesseract.js · No account, no server, no data leaves this device.</p>
+  </div>
+</footer>
+
+<!-- Tesseract.js — global `Tesseract` -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+
+<script src="assets/js/util.js"></script>
+<script src="assets/js/samples.js"></script>
+<script src="assets/js/ocr.js"></script>
+<script src="assets/js/parse.js"></script>
+<script src="assets/js/validate.js"></script>
+<script src="assets/js/visual.js"></script>
+<script src="assets/js/report.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,4121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ReceiptShield — AI-Based Receipt Fraud &amp; Tampering Detection</title>
+<meta name="description" content="ReceiptShield checks whether a digital receipt or bill may have been altered: OCR extraction, item/price/tax maths validation, visual tampering analysis and a fraud risk report." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2l11 4v9c0 7-4.7 12.4-11 15C9.7 27.4 5 22 5 15V6z' fill='%232dd4bf'/%3E%3Cpath d='M11 15.5l3.4 3.4L21.5 12' stroke='%23042f2a' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://cdn.jsdelivr.net" />
+<style>
+/* ==========================================================================
+   ReceiptShield — stylesheet
+   Dark forensic-console aesthetic. No build step, no framework.
+   ========================================================================== */
+
+:root{
+  --bg:#070b12;
+  --bg-2:#0b111b;
+  --panel:#0e1520;
+  --panel-2:#121b28;
+  --line:#1d2836;
+  --line-2:#28374a;
+  --ink:#e8eef7;
+  --ink-2:#a7b6c9;
+  --ink-3:#6d7f94;
+  --accent:#2dd4bf;
+  --accent-2:#5eead4;
+  --accent-ink:#042f2a;
+  --danger:#f4536a;
+  --warn:#f5a524;
+  --ok:#3ddc84;
+  --info:#60a5fa;
+  --radius:14px;
+  --radius-sm:9px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --shadow:0 18px 45px -22px rgba(0,0,0,.85);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;
+  background-image:
+    radial-gradient(60rem 40rem at 12% -10%,rgba(45,212,191,.09),transparent 60%),
+    radial-gradient(50rem 35rem at 95% 0%,rgba(96,165,250,.07),transparent 55%);
+  background-attachment:fixed;
+}
+h1,h2,h3,h4{line-height:1.2;margin:0;letter-spacing:-.02em;font-weight:650}
+p{margin:0}
+a{color:inherit;text-decoration:none}
+svg{display:block}
+button,input,textarea,select{font:inherit;color:inherit}
+canvas{max-width:100%;display:block}
+
+.wrap{width:min(1180px,100% - 2.5rem);margin-inline:auto}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.mt{margin-top:1.6rem}
+.skip-link{position:absolute;left:-999px;top:.5rem;z-index:99;background:var(--accent);color:var(--accent-ink);padding:.6rem 1rem;border-radius:8px;font-weight:600}
+.skip-link:focus{left:.75rem}
+
+/* ── buttons ─────────────────────────────────────────────── */
+.btn{
+  --b-bg:transparent;--b-bd:var(--line-2);--b-ink:var(--ink);
+  display:inline-flex;align-items:center;justify-content:center;gap:.5rem;
+  padding:.72rem 1.15rem;border-radius:var(--radius-sm);border:1px solid var(--b-bd);
+  background:var(--b-bg);color:var(--b-ink);font-weight:600;font-size:.92rem;
+  cursor:pointer;transition:transform .12s ease,background .18s ease,border-color .18s ease,opacity .18s ease;
+  white-space:nowrap;
+}
+.btn:hover{transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn--sm{padding:.5rem .85rem;font-size:.84rem}
+.btn--ghost{background:rgba(255,255,255,.02)}
+.btn--ghost:hover{background:rgba(255,255,255,.06);border-color:var(--accent)}
+.btn--primary{--b-bg:linear-gradient(180deg,var(--accent-2),var(--accent));--b-bd:transparent;--b-ink:var(--accent-ink)}
+.btn--primary:hover{box-shadow:0 10px 28px -12px rgba(45,212,191,.75)}
+.btn--wide{width:100%}
+.btn[disabled]{opacity:.4;cursor:not-allowed;transform:none}
+
+/* ── topbar ──────────────────────────────────────────────── */
+.topbar{position:sticky;top:0;z-index:40;backdrop-filter:blur(14px);background:rgba(7,11,18,.78);border-bottom:1px solid var(--line)}
+.topbar__in{display:flex;align-items:center;gap:1.4rem;height:64px}
+.brand{display:flex;align-items:center;gap:.6rem;font-weight:700;letter-spacing:-.02em}
+.brand__mark{width:26px;height:26px;color:var(--accent)}
+.brand__name{font-size:1.06rem}
+.brand__name span{color:var(--accent)}
+.nav{display:flex;gap:1.4rem;margin-left:auto;font-size:.9rem;color:var(--ink-2)}
+.nav a:hover{color:var(--accent)}
+.nav-cta{margin-left:0}
+@media(max-width:820px){.nav{display:none}.nav-cta{margin-left:auto}}
+@media(max-width:520px){.nav-cta{display:none}}
+
+/* ── hero ────────────────────────────────────────────────── */
+.hero{padding:4.5rem 0 3rem}
+.hero__grid{display:grid;grid-template-columns:1.35fr .8fr;gap:3rem;align-items:center}
+@media(max-width:900px){.hero__grid{grid-template-columns:1fr;gap:2.2rem}}
+.eyebrow{font-size:.78rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:1rem}
+.hero h1{font-size:clamp(2.1rem,4.6vw,3.4rem);font-weight:700}
+.hero h1 em{font-style:normal;color:var(--accent);position:relative;white-space:nowrap}
+.lede{margin-top:1.15rem;color:var(--ink-2);font-size:1.06rem;max-width:60ch}
+.hero__cta{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1.8rem}
+.hero__facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1.4rem;list-style:none;margin:2.6rem 0 0;padding:0}
+.hero__facts li{display:flex;flex-direction:column;gap:.15rem;padding-left:.9rem;border-left:2px solid var(--line-2)}
+.hero__facts strong{font-size:.95rem}
+.hero__facts span{font-size:.84rem;color:var(--ink-3)}
+
+.hero__card{background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);border-radius:var(--radius);padding:1.3rem;box-shadow:var(--shadow);position:relative}
+.mini{position:relative;font-family:var(--mono);font-size:.86rem}
+.mini__head{display:flex;justify-content:space-between;align-items:baseline;padding:.55rem .2rem;border-bottom:1px solid var(--line)}
+.mini__head span:first-child{font-family:var(--sans);color:var(--ink-3);font-size:.76rem;text-transform:uppercase;letter-spacing:.1em}
+.mini__amt{color:var(--accent);font-weight:700;font-size:1.05rem}
+.mini__body{padding:.7rem .2rem 0;color:var(--ink-2)}
+.mini__body>div{display:flex;justify-content:space-between;padding:.24rem 0}
+.mini__sub{border-top:1px dashed var(--line-2);margin-top:.4rem;padding-top:.5rem !important;color:var(--ink)}
+.mini__pen{position:absolute;right:0;top:1.35rem;width:90px;height:26px}
+.mini__flag{margin-top:1rem;padding:.5rem .7rem;border-radius:8px;background:rgba(45,212,191,.08);border:1px solid rgba(45,212,191,.3);color:var(--accent-2);font-family:var(--sans);font-size:.82rem;font-weight:600}
+.hero__card-note{margin-top:.9rem;font-size:.82rem;color:var(--ink-3)}
+
+.pipeline{display:grid;grid-template-columns:repeat(7,1fr);gap:.55rem;list-style:none;margin:3.2rem 0 0;padding:0}
+.pipeline li{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm);padding:.75rem .7rem;font-size:.79rem;color:var(--ink-2);line-height:1.35}
+.pipeline li span{display:block;font-family:var(--mono);font-size:.7rem;color:var(--accent);margin-bottom:.28rem}
+@media(max-width:1000px){.pipeline{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:700px){.pipeline{grid-template-columns:repeat(2,1fr)}}
+
+/* ── section chrome ──────────────────────────────────────── */
+.section-head{max-width:70ch;margin-bottom:2rem}
+.section-head h2{font-size:clamp(1.5rem,2.6vw,2rem)}
+.section-head p{margin-top:.7rem;color:var(--ink-2)}
+.detector{padding:3rem 0}
+.results{padding:2rem 0 3.5rem;border-top:1px solid var(--line)}
+.method{padding:3.5rem 0;border-top:1px solid var(--line);background:linear-gradient(180deg,rgba(255,255,255,.012),transparent)}
+.limits{padding:3.5rem 0;border-top:1px solid var(--line)}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:1.4rem}
+.panel__head{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1.1rem}
+.panel__head h3{font-size:1rem}
+.panel__foot{margin-top:1.2rem;display:flex;flex-direction:column;gap:.6rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:1.3rem}
+.card h4{font-size:.95rem}
+.card__note{margin-top:.45rem;font-size:.85rem;color:var(--ink-3)}
+.card__head{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.card__actions{display:flex;gap:.5rem}
+.tag{font-family:var(--mono);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);border:1px solid var(--line-2);border-radius:999px;padding:.22rem .6rem}
+.tag.is-run{color:var(--accent);border-color:rgba(45,212,191,.4)}
+.tag.is-done{color:var(--ok);border-color:rgba(61,220,132,.4)}
+.tag.is-fail{color:var(--danger);border-color:rgba(244,83,106,.4)}
+
+.banner{margin-bottom:1.2rem;padding:.85rem 1rem;border-radius:var(--radius-sm);font-size:.9rem;border:1px solid var(--line-2);background:var(--panel)}
+.banner--warn{border-color:rgba(245,165,36,.45);background:rgba(245,165,36,.08);color:#ffd591}
+.banner--err{border-color:rgba(244,83,106,.45);background:rgba(244,83,106,.08);color:#ffc0ca}
+.banner--ok{border-color:rgba(61,220,132,.4);background:rgba(61,220,132,.07);color:#b6f5cf}
+
+/* ── detector grid ───────────────────────────────────────── */
+.detector__grid{display:grid;grid-template-columns:1.15fr .85fr;gap:1.3rem;align-items:start}
+@media(max-width:960px){.detector__grid{grid-template-columns:1fr}}
+
+.modes{display:flex;gap:.35rem;padding:.3rem;background:var(--bg-2);border:1px solid var(--line);border-radius:10px;margin-bottom:1.1rem}
+.mode{flex:1;padding:.5rem .7rem;border:0;background:transparent;border-radius:7px;color:var(--ink-3);font-size:.87rem;font-weight:600;cursor:pointer}
+.mode.is-active{background:var(--panel-2);color:var(--ink);box-shadow:0 1px 0 rgba(255,255,255,.04) inset}
+.mode-panel{display:none}
+.mode-panel.is-active{display:block}
+
+.dropzone{border:1.5px dashed var(--line-2);border-radius:var(--radius);padding:2.1rem 1.2rem;text-align:center;cursor:pointer;transition:border-color .18s,background .18s;background:rgba(255,255,255,.012)}
+.dropzone:hover,.dropzone:focus-visible{border-color:var(--accent);background:rgba(45,212,191,.05);outline:none}
+.dropzone.is-over{border-color:var(--accent);background:rgba(45,212,191,.1)}
+.dropzone svg{width:32px;height:32px;margin:0 auto .8rem;color:var(--accent)}
+.dropzone__title{font-weight:600}
+.dropzone__sub{font-size:.82rem;color:var(--ink-3);margin:.3rem 0 .9rem}
+.dz-file{display:flex;align-items:center;gap:.85rem;text-align:left}
+.dz-file img{width:66px;height:66px;object-fit:cover;object-position:top;border-radius:8px;border:1px solid var(--line-2);background:#fff}
+.dz-file p{font-size:.82rem;color:var(--ink-2);margin:0}
+.dz-file strong{display:block;color:var(--ink);font-size:.9rem;overflow-wrap:anywhere;margin-bottom:.15rem}
+#sampleNote{margin-top:.9rem;color:var(--ink-3)}
+#sampleNote strong{color:var(--accent-2)}
+
+.samples{margin-top:1.2rem}
+.samples__label{font-size:.8rem;color:var(--ink-3);margin-bottom:.55rem}
+.samples__row{display:flex;gap:.55rem;flex-wrap:wrap}
+.field{display:block}
+.field__label{display:block;font-size:.82rem;color:var(--ink-3);margin-bottom:.45rem}
+textarea,input[type=text]{
+  width:100%;background:var(--bg-2);border:1px solid var(--line-2);border-radius:var(--radius-sm);
+  padding:.8rem .9rem;font-family:var(--mono);font-size:.82rem;line-height:1.55;resize:vertical;
+}
+textarea:focus,input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+.hint{margin-top:.7rem;font-size:.8rem;color:var(--ink-3)}
+
+/* ── stages ──────────────────────────────────────────────── */
+.stages{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.15rem}
+.stages li{display:flex;gap:.85rem;align-items:flex-start;padding:.6rem .2rem;border-bottom:1px solid rgba(29,40,54,.6)}
+.stages li:last-child{border-bottom:0}
+.stages i{flex:0 0 18px;height:18px;margin-top:2px;border-radius:50%;border:1.5px solid var(--line-2);position:relative}
+.stages strong{display:block;font-size:.88rem;font-weight:600}
+.stages span{display:block;font-size:.76rem;color:var(--ink-3);line-height:1.4}
+.stages li.is-active i{border-color:var(--accent);box-shadow:0 0 0 4px rgba(45,212,191,.12)}
+.stages li.is-active i::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--accent);animation:pulse 1s infinite}
+.stages li.is-done i{border-color:var(--ok);background:var(--ok)}
+.stages li.is-done i::after{content:"";position:absolute;left:5px;top:3px;width:4px;height:8px;border:solid var(--bg);border-width:0 2px 2px 0;transform:rotate(42deg)}
+.stages li.is-fail i{border-color:var(--danger);background:var(--danger)}
+.stages li.is-warn i{border-color:var(--warn);background:var(--warn)}
+.stages li.is-warn strong{color:#ffd591}
+.stages li.is-fail strong{color:#ffc0ca}
+.stages li.is-skip i{border-color:var(--line-2);opacity:.5}
+.stages li.is-done strong{color:var(--ink)}
+@keyframes pulse{0%,100%{transform:scale(.85);opacity:.7}50%{transform:scale(1);opacity:1}}
+
+.ocrbar{margin-top:1.1rem}
+.ocrbar__meta{display:flex;justify-content:space-between;font-size:.78rem;color:var(--ink-3);margin-bottom:.4rem;font-family:var(--mono)}
+.ocrbar__track{height:6px;border-radius:999px;background:var(--bg-2);border:1px solid var(--line);overflow:hidden}
+.ocrbar__fill{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .25s ease}
+
+/* ── risk ────────────────────────────────────────────────── */
+.risk{display:grid;grid-template-columns:auto 1fr;gap:2.2rem;align-items:center;background:linear-gradient(135deg,var(--panel-2),var(--panel));border:1px solid var(--line);border-radius:var(--radius);padding:1.6rem 1.8rem;box-shadow:var(--shadow)}
+@media(max-width:760px){.risk{grid-template-columns:1fr;gap:1.3rem;padding:1.3rem}}
+.risk__dial{position:relative;width:168px;height:168px}
+.risk__dial svg{width:100%;height:100%;transform:rotate(-90deg)}
+.dial__track{fill:none;stroke:var(--bg-2);stroke-width:13}
+.dial__value{fill:none;stroke:var(--accent);stroke-width:13;stroke-linecap:round;stroke-dasharray:452;stroke-dashoffset:452;transition:stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1),stroke .5s}
+.risk__dialtext{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.risk__score{font-size:2.5rem;font-weight:700;font-family:var(--mono);line-height:1}
+.risk__of{font-size:.72rem;color:var(--ink-3);letter-spacing:.08em;text-transform:uppercase}
+.risk__band{display:inline-block;font-size:.8rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:.32rem .8rem;border-radius:999px;border:1px solid currentColor}
+.risk__verdict{margin-top:.9rem;color:var(--ink-2);max-width:72ch}
+.risk__counts{display:flex;gap:1.4rem;flex-wrap:wrap;list-style:none;margin:1.1rem 0 0;padding:0;font-size:.84rem}
+.risk__counts li{display:flex;align-items:center;gap:.5rem;color:var(--ink-2)}
+.risk__counts b{font-family:var(--mono)}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.dot--critical{background:#ff2d55}.dot--high{background:var(--danger)}.dot--medium{background:var(--warn)}
+.dot--low{background:var(--info)}.dot--info{background:var(--ok)}
+
+.tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:.7rem;margin:1.1rem 0 1.6rem}
+@media(max-width:960px){.tiles{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:560px){.tiles{grid-template-columns:repeat(2,1fr)}}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm);padding:.8rem .9rem;display:flex;flex-direction:column;gap:.25rem}
+.tile__k{font-size:.72rem;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-3)}
+.tile__v{font-family:var(--mono);font-size:1.22rem;font-weight:600}
+.tile__v small{font-size:.72rem;color:var(--ink-3);font-weight:400}
+
+/* ── tabs ────────────────────────────────────────────────── */
+.tabs{display:flex;gap:.3rem;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:1.3rem}
+.tab{background:transparent;border:0;border-bottom:2px solid transparent;padding:.7rem 1rem;color:var(--ink-3);font-weight:600;font-size:.9rem;cursor:pointer;margin-bottom:-1px}
+.tab:hover{color:var(--ink)}
+.tab.is-active{color:var(--accent);border-bottom-color:var(--accent)}
+.tabpanel{display:none}
+.tabpanel.is-active{display:block;animation:fade .28s ease}
+@keyframes fade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+
+.filters{display:flex;gap:.45rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem}
+.filters__label{font-size:.76rem;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3);margin-right:.3rem}
+.chip{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:.35rem .8rem;font-size:.8rem;color:var(--ink-2);cursor:pointer}
+.chip:hover{border-color:var(--accent)}
+.chip.is-active{background:rgba(45,212,191,.14);border-color:var(--accent);color:var(--accent-2);font-weight:600}
+
+/* ── findings ────────────────────────────────────────────── */
+.findings{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:.9rem}
+.finding{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--line-2);border-radius:var(--radius-sm);padding:1.05rem 1.1rem}
+.finding--critical{border-left-color:#ff2d55}
+.finding--high{border-left-color:var(--danger)}
+.finding--medium{border-left-color:var(--warn)}
+.finding--low{border-left-color:var(--info)}
+.finding--info{border-left-color:var(--ok)}
+.finding__top{display:flex;align-items:center;gap:.6rem;justify-content:space-between}
+.finding__sev{font-family:var(--mono);font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:.18rem .5rem;border-radius:5px;border:1px solid currentColor}
+.sev-critical{color:#ff2d55}.sev-high{color:var(--danger)}.sev-medium{color:var(--warn)}.sev-low{color:var(--info)}.sev-info{color:var(--ok)}
+.finding__stage{font-family:var(--mono);font-size:.68rem;color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase}
+.finding h4{margin-top:.7rem;font-size:.95rem}
+.finding p{margin-top:.45rem;font-size:.86rem;color:var(--ink-2)}
+.finding__ev{margin-top:.8rem;padding:.6rem .7rem;background:var(--bg-2);border:1px solid var(--line);border-radius:7px;font-family:var(--mono);font-size:.76rem;color:var(--ink-2);white-space:pre-wrap;overflow-wrap:anywhere}
+.finding__where{margin-top:.5rem;font-family:var(--mono);font-size:.72rem;color:var(--ink-3)}
+.empty{padding:2rem;text-align:center;color:var(--ink-3);border:1px dashed var(--line-2);border-radius:var(--radius)}
+
+/* ── tables ──────────────────────────────────────────────── */
+.split{display:grid;grid-template-columns:1.4fr 1fr;gap:1.1rem;align-items:start}
+@media(max-width:900px){.split{grid-template-columns:1fr}}
+.tw{overflow-x:auto;margin-top:.9rem}
+.tbl{width:100%;border-collapse:collapse;font-size:.84rem;min-width:520px}
+.tbl th{text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);padding:.5rem .6rem;border-bottom:1px solid var(--line-2);font-weight:600;white-space:nowrap}
+.tbl td{padding:.55rem .6rem;border-bottom:1px solid rgba(29,40,54,.7);vertical-align:top}
+.tbl tbody tr:hover{background:rgba(255,255,255,.02)}
+.tbl .num{text-align:right;font-family:var(--mono);white-space:nowrap}
+.tbl tbody td.num{font-variant-numeric:tabular-nums}
+.tbl .desc{max-width:32ch}
+.pill{display:inline-block;font-family:var(--mono);font-size:.7rem;font-weight:700;letter-spacing:.06em;padding:.16rem .5rem;border-radius:5px;text-transform:uppercase}
+.pill--pass{background:rgba(61,220,132,.14);color:var(--ok)}
+.pill--warn{background:rgba(245,165,36,.14);color:var(--warn)}
+.pill--fail{background:rgba(244,83,106,.16);color:var(--danger)}
+.pill--skip{background:rgba(167,182,201,.12);color:var(--ink-3)}
+.mono{font-family:var(--mono)}
+.muted{color:var(--ink-3)}
+.neg{color:var(--danger)}
+.pos{color:var(--ok)}
+
+.kv{margin-top:.9rem;display:grid;grid-template-columns:auto 1fr;gap:.45rem 1.2rem;font-size:.86rem}
+.kv dt{color:var(--ink-3)}
+.kv dd{margin:0;font-family:var(--mono);text-align:right;overflow-wrap:anywhere}
+.raw{margin-top:1.1rem;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:1rem 1.2rem}
+.raw summary{cursor:pointer;font-weight:600;font-size:.9rem}
+.raw pre{margin-top:.9rem;font-family:var(--mono);font-size:.78rem;color:var(--ink-2);white-space:pre-wrap;max-height:340px;overflow:auto;line-height:1.55}
+
+/* ── visual viewer ───────────────────────────────────────── */
+.viewer{display:grid;grid-template-columns:repeat(3,1fr);gap:.85rem;margin-top:1.1rem}
+@media(max-width:900px){.viewer{grid-template-columns:1fr}}
+.viewer figure{margin:0;background:var(--bg-2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:.6rem;overflow:hidden}
+.viewer canvas{width:100%;height:auto;border-radius:6px;background:#0a0f17}
+.viewer figcaption{margin-top:.5rem;font-size:.75rem;color:var(--ink-3);text-align:center}
+.viewer__controls{display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:1rem;padding-top:.9rem;border-top:1px solid var(--line)}
+.switch{display:flex;align-items:center;gap:.5rem;font-size:.82rem;color:var(--ink-2);cursor:pointer}
+.switch input{accent-color:var(--accent);width:15px;height:15px;cursor:pointer}
+.json{margin-top:.9rem;font-family:var(--mono);font-size:.76rem;background:var(--bg-2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:1rem;max-height:560px;overflow:auto;color:#cfe3f5;line-height:1.6}
+
+/* ── links & zoom lightbox ───────────────────────────────── */
+.linkish{background:none;border:0;padding:0;color:var(--accent);font-size:.8rem;font-weight:600;cursor:pointer;text-align:left}
+.linkish:hover{text-decoration:underline}
+.zoom{border:1px solid var(--line-2);border-radius:var(--radius);background:var(--panel);padding:.8rem;max-width:94vw;max-height:92vh}
+.zoom::backdrop{background:rgba(3,6,10,.86);backdrop-filter:blur(4px)}
+.zoom img{max-width:88vw;max-height:78vh;border-radius:8px;background:#fff;object-fit:contain}
+.zoom__close{margin-bottom:.7rem;padding:.4rem .85rem;border-radius:7px;border:1px solid var(--line-2);background:rgba(255,255,255,.03);color:var(--ink-2);font-size:.82rem;font-weight:600;cursor:pointer}
+.zoom__close:hover{border-color:var(--accent);color:var(--ink)}
+
+/* ── method / limits ─────────────────────────────────────── */
+.method__grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:.9rem}
+.step-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:1.2rem;position:relative;overflow:hidden}
+.step-card::after{content:"";position:absolute;inset:0 auto 0 0;width:2px;background:linear-gradient(180deg,var(--accent),transparent);opacity:.6}
+.step-card__n{font-family:var(--mono);font-size:.72rem;color:var(--accent);letter-spacing:.1em}
+.step-card h3{margin-top:.4rem;font-size:.98rem}
+.step-card p{margin-top:.5rem;font-size:.86rem;color:var(--ink-2)}
+.innovate{margin-top:1.6rem;background:linear-gradient(135deg,rgba(45,212,191,.09),rgba(96,165,250,.06));border:1px solid rgba(45,212,191,.28);border-radius:var(--radius);padding:1.4rem 1.6rem}
+.innovate h3{font-size:1rem;color:var(--accent-2)}
+.innovate p{margin-top:.55rem;color:var(--ink-2)}
+.innovate strong{color:var(--ink)}
+.limits__grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:.9rem}
+.limits .card p{margin-top:.55rem;font-size:.87rem;color:var(--ink-2)}
+
+/* ── footer ──────────────────────────────────────────────── */
+.footer{border-top:1px solid var(--line);padding:2.2rem 0;background:var(--bg-2)}
+.footer__in{display:flex;justify-content:space-between;gap:1.4rem;flex-wrap:wrap;align-items:center}
+.footer__brand{font-weight:700;color:var(--accent)}
+.footer__note{font-size:.85rem;color:var(--ink-3);margin-top:.3rem}
+.footer__meta{font-size:.8rem;color:var(--ink-3)}
+
+@media(prefers-reduced-motion:reduce){
+  *{animation-duration:.001ms !important;transition-duration:.001ms !important}
+  html{scroll-behavior:auto}
+}
+
+</style>
+</head>
+<body>
+
+<a class="skip-link" href="#detector">Skip to the detector</a>
+
+<header class="topbar">
+  <div class="wrap topbar__in">
+    <a class="brand" href="#top">
+      <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M16 2l11 4v9c0 7-4.7 12.4-11 15C9.7 27.4 5 22 5 15V6z" fill="currentColor"/>
+        <path d="M11 15.5l3.4 3.4L21.5 12" stroke="#042f2a" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="brand__name">Receipt<span>Shield</span></span>
+    </a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#detector">Detector</a>
+      <a href="#method">How it works</a>
+      <a href="#limits">Limits</a>
+    </nav>
+    <a class="btn btn--ghost btn--sm nav-cta" href="#detector">Analyse a receipt</a>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ───────────────────────── HERO ───────────────────────── -->
+  <section class="hero">
+    <div class="wrap hero__grid">
+      <div class="hero__copy">
+        <p class="eyebrow">AI-Based Receipt Fraud &amp; Tampering Detection System</p>
+        <h1>Does that receipt actually <em>add up</em>?</h1>
+        <p class="lede">
+          ReceiptShield reads a digital receipt or bill and checks whether it may have been
+          altered — and whether its information is mathematically and logically consistent.
+          It reads the items, quantities, prices, tax, discount and total with OCR, proves the
+          arithmetic, then studies the image itself for edited text, unusual fonts, spacing
+          and misalignment.
+        </p>
+        <div class="hero__cta">
+          <a class="btn btn--primary" href="#detector">Run a receipt</a>
+          <a class="btn btn--ghost" href="#method">See the seven stages</a>
+        </div>
+        <ul class="hero__facts">
+          <li><strong>Runs in your browser</strong><span>No upload, no server, no API key</span></li>
+          <li><strong>Arithmetic + pixels</strong><span>Maths checks and image forensics together</span></li>
+          <li><strong>Auditable output</strong><span>Every flag carries its evidence</span></li>
+        </ul>
+      </div>
+
+      <aside class="hero__card" aria-label="Example">
+        <div class="mini">
+          <div class="mini__head">
+            <span>Grand Total</span>
+            <span class="mini__amt" id="heroAmount">₹500.00</span>
+          </div>
+          <div class="mini__body">
+            <div><span>2 × Filter Coffee</span><span>₹300.00</span></div>
+            <div><span>1 × Sandwich</span><span>₹200.00</span></div>
+            <div class="mini__sub"><span>Subtotal</span><span>₹500.00</span></div>
+          </div>
+          <svg class="mini__pen" viewBox="0 0 90 26" aria-hidden="true">
+            <ellipse cx="58" cy="12" rx="15" ry="8" fill="rgba(45,212,191,.10)" stroke="rgba(45,212,191,.55)" stroke-dasharray="4 3"/>
+          </svg>
+          <div class="mini__flag">Edited total detected</div>
+        </div>
+        <p class="hero__card-note">₹500 altered to ₹1,500 — the item maths no longer reconciles.</p>
+      </aside>
+    </div>
+
+    <div class="wrap">
+      <ol class="pipeline" aria-label="Detection pipeline">
+        <li><span>01</span>Receipt Upload</li>
+        <li><span>02</span>OCR Extraction</li>
+        <li><span>03</span>Item / Price / Tax Detection</li>
+        <li><span>04</span>Mathematical Validation</li>
+        <li><span>05</span>Visual Tampering Analysis</li>
+        <li><span>06</span>Suspicious Information Detection</li>
+        <li><span>07</span>Fraud Risk Report</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── DETECTOR ───────────────────────── -->
+  <section class="detector" id="detector">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Run the detector</h2>
+        <p>Drop in a receipt image, load one of the built-in samples, or paste receipt text to exercise the validation engine on its own.</p>
+      </div>
+
+      <div id="banner" class="banner" role="status" hidden></div>
+
+      <div class="detector__grid">
+
+        <!-- Input column -->
+        <div class="panel panel--input">
+          <div class="panel__head">
+            <h3>1 · Provide a receipt</h3>
+          </div>
+
+          <div class="modes" role="tablist" aria-label="Input mode">
+            <button class="mode is-active" role="tab" aria-selected="true" data-mode="image" id="modeImage">Upload image</button>
+            <button class="mode" role="tab" aria-selected="false" data-mode="text" id="modeText">Paste text</button>
+          </div>
+
+          <!-- image mode -->
+          <div class="mode-panel is-active" data-panel="image">
+            <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Choose a receipt image, or drop one here">
+              <div class="dz-default" id="dzDefault">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <p class="dropzone__title">Drop a receipt image here</p>
+                <p class="dropzone__sub">PNG, JPG or WEBP · runs locally in your browser · paste from the clipboard works too</p>
+                <span class="btn btn--ghost btn--sm">Browse files</span>
+              </div>
+              <div class="dz-file" id="dzFile" hidden></div>
+              <input id="fileInput" type="file" accept="image/*" hidden />
+            </div>
+            <p class="hint" id="sampleNote" hidden></p>
+
+            <div class="samples">
+              <p class="samples__label">No receipt handy? Generate one:</p>
+              <div class="samples__row">
+                <button class="btn btn--ghost btn--sm" id="btnGenuine">Load genuine sample</button>
+                <button class="btn btn--ghost btn--sm" id="btnTampered">Load tampered sample</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- text mode -->
+          <div class="mode-panel" data-panel="text">
+            <label class="field">
+              <span class="field__label">Receipt text</span>
+              <textarea id="textInput" rows="12" spellcheck="false"
+placeholder="Grand Cafe
+Invoice: INV-2291   Date: 12/03/2026
+------------------------------------
+2 x Filter Coffee        300.00
+1 x Club Sandwich        200.00
+Subtotal                 500.00
+GST 5%                    25.00
+Grand Total              525.00"></textarea>
+            </label>
+            <div class="samples__row">
+              <button class="btn btn--ghost btn--sm" id="btnTextGenuine">Sample text — genuine</button>
+              <button class="btn btn--ghost btn--sm" id="btnTextTampered">Sample text — tampered</button>
+            </div>
+            <p class="hint">Text mode runs stages 3, 4, 6 and 7. Visual analysis (stage 5) needs an image.</p>
+          </div>
+
+          <div class="panel__foot">
+            <button class="btn btn--primary btn--wide" id="btnRun" disabled>Run detection</button>
+            <button class="btn btn--ghost btn--wide" id="btnReset" hidden>Start over</button>
+          </div>
+        </div>
+
+        <!-- Pipeline column -->
+        <div class="panel panel--progress">
+          <div class="panel__head">
+            <h3>2 · Detection pipeline</h3>
+            <span class="tag" id="runTag">idle</span>
+          </div>
+          <ol class="stages" id="stages">
+            <li data-stage="upload"><i></i><div><strong>Receipt Upload</strong><span>Image accepted and normalised</span></div></li>
+            <li data-stage="ocr"><i></i><div><strong>OCR Extraction</strong><span>Text, word boxes and confidence</span></div></li>
+            <li data-stage="parse"><i></i><div><strong>Item / Price / Tax Detection</strong><span>Fields pulled from the text</span></div></li>
+            <li data-stage="math"><i></i><div><strong>Mathematical Validation</strong><span>Line, subtotal and total arithmetic</span></div></li>
+            <li data-stage="visual"><i></i><div><strong>Visual Tampering Analysis</strong><span>Error-level, tone and typography forensics</span></div></li>
+            <li data-stage="suspicious"><i></i><div><strong>Suspicious Information Detection</strong><span>Logical and statistical anomalies</span></div></li>
+            <li data-stage="report"><i></i><div><strong>Fraud Risk Report</strong><span>Weighted score, findings, evidence</span></div></li>
+          </ol>
+          <div class="ocrbar" id="ocrbar" hidden>
+            <div class="ocrbar__meta"><span id="ocrPhase">Working…</span><span id="ocrPct">0%</span></div>
+            <div class="ocrbar__track"><div class="ocrbar__fill" id="ocrFill"></div></div>
+          </div>
+          <p class="sr-only" id="statusLive" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── RESULTS ───────────────────────── -->
+  <section class="results" id="results" hidden>
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Fraud risk report</h2>
+        <p id="reportSubtitle"></p>
+      </div>
+
+      <div class="risk">
+        <div class="risk__dial">
+          <svg viewBox="0 0 180 180" aria-hidden="true">
+            <circle class="dial__track" cx="90" cy="90" r="72"/>
+            <circle class="dial__value" id="dialValue" cx="90" cy="90" r="72"/>
+          </svg>
+          <div class="risk__dialtext">
+            <span class="risk__score" id="riskScore">0</span>
+            <span class="risk__of">/ 100 risk</span>
+          </div>
+        </div>
+        <div class="risk__body">
+          <div class="risk__band" id="riskBand">Low risk</div>
+          <p class="risk__verdict" id="riskVerdict"></p>
+          <ul class="risk__counts" id="riskCounts"></ul>
+        </div>
+      </div>
+
+      <div class="tiles">
+        <div class="tile"><span class="tile__k">OCR confidence</span><span class="tile__v" id="tileConf">—</span></div>
+        <div class="tile"><span class="tile__k">Lines read</span><span class="tile__v" id="tileLines">—</span></div>
+        <div class="tile"><span class="tile__k">Items parsed</span><span class="tile__v" id="tileItems">—</span></div>
+        <div class="tile"><span class="tile__k">Maths checks</span><span class="tile__v" id="tileChecks">—</span></div>
+        <div class="tile"><span class="tile__k">Findings</span><span class="tile__v" id="tileFlags">—</span></div>
+        <div class="tile"><span class="tile__k">Stages run</span><span class="tile__v" id="tileStages">—</span></div>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="Report views">
+        <button class="tab is-active" role="tab" aria-selected="true" data-tab="findings">Findings</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="extract">Extraction</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="math">Maths reconciliation</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="visual">Visual evidence</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="json">JSON</button>
+      </div>
+
+      <!-- findings -->
+      <div class="tabpanel is-active" data-panel="findings">
+        <div class="filters">
+          <span class="filters__label">Filter</span>
+          <button class="chip is-active" data-filter="all">All</button>
+          <button class="chip" data-filter="critical">Critical</button>
+          <button class="chip" data-filter="high">High</button>
+          <button class="chip" data-filter="medium">Medium</button>
+          <button class="chip" data-filter="low">Low</button>
+          <button class="chip" data-filter="info">Passed</button>
+        </div>
+        <div id="findingsList" class="findings"></div>
+      </div>
+
+      <!-- extraction -->
+      <div class="tabpanel" data-panel="extract">
+        <div class="split">
+          <div class="card">
+            <h4>Line items</h4>
+            <div class="tw"><table class="tbl" id="tblItems">
+              <thead><tr><th>#</th><th>Description</th><th class="num">Qty</th><th class="num">Unit</th><th class="num">Line total</th><th class="num">Conf.</th></tr></thead>
+              <tbody></tbody>
+            </table></div>
+          </div>
+          <div class="card">
+            <h4>Totals &amp; metadata</h4>
+            <dl class="kv" id="dlTotals"></dl>
+          </div>
+        </div>
+        <details class="raw">
+          <summary>Raw OCR text</summary>
+          <pre id="rawText"></pre>
+        </details>
+      </div>
+
+      <!-- maths -->
+      <div class="tabpanel" data-panel="math">
+        <div class="card">
+          <h4>Arithmetic reconciliation</h4>
+          <p class="card__note">Every equation the receipt asserts, recomputed and compared with the printed value.</p>
+          <div class="tw"><table class="tbl" id="tblMath">
+            <thead><tr><th>Check</th><th>Equation</th><th class="num">Printed</th><th class="num">Computed</th><th class="num">Δ</th><th>Result</th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <!-- visual -->
+      <div class="tabpanel" data-panel="visual">
+        <div class="card">
+          <h4>Image forensics</h4>
+          <p class="card__note" id="visualNote"></p>
+          <div class="viewer">
+            <figure><canvas id="cvOriginal"></canvas><figcaption>Original</figcaption></figure>
+            <figure><canvas id="cvEla"></canvas><figcaption>Error-level analysis (re-compression residue)</figcaption></figure>
+            <figure><canvas id="cvBoxes"></canvas><figcaption>Flagged regions &amp; typography boxes</figcaption></figure>
+          </div>
+          <div class="viewer__controls">
+            <label class="switch"><input type="checkbox" id="tglBoxes" checked /><span>Show flagged regions</span></label>
+            <label class="switch"><input type="checkbox" id="tglHeat" checked /><span>Show error-level heat</span></label>
+            <label class="switch"><input type="checkbox" id="tglText" checked /><span>Show word boxes</span></label>
+            <label class="switch"><input type="checkbox" id="tglAmp" /><span>Amplify error level ×8</span></label>
+          </div>
+          <h4 class="mt">Suspicious regions</h4>
+          <div class="tw"><table class="tbl" id="tblRegions">
+            <thead><tr><th>#</th><th>Region (x, y, w, h)</th><th>Signal</th><th class="num">Score</th><th>Why it stands out</th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <!-- json -->
+      <div class="tabpanel" data-panel="json">
+        <div class="card">
+          <div class="card__head">
+            <h4>Machine-readable report</h4>
+            <div class="card__actions">
+              <button class="btn btn--ghost btn--sm" id="btnCopyJson">Copy</button>
+              <button class="btn btn--ghost btn--sm" id="btnDownloadJson">Download .json</button>
+            </div>
+          </div>
+          <pre class="json" id="jsonOut"></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── METHOD ───────────────────────── -->
+  <section class="method" id="method">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>How the seven stages work</h2>
+        <p>ReceiptShield combines OCR, mathematical validation and image-based tampering detection instead of checking only the visual appearance of a receipt.</p>
+      </div>
+      <div class="method__grid">
+        <article class="step-card"><span class="step-card__n">01</span><h3>Receipt Upload</h3>
+          <p>The image is normalised, upscaled for legibility and kept entirely in the browser. EXIF and embedded-editor markers are inspected but never uploaded.</p></article>
+        <article class="step-card"><span class="step-card__n">02</span><h3>OCR Extraction</h3>
+          <p>A Tesseract engine runs in a web worker and returns raw text plus a word-level geometry table: bounding boxes, baselines and per-word confidence.</p></article>
+        <article class="step-card"><span class="step-card__n">03</span><h3>Item / Price / Tax Detection</h3>
+          <p>Lines are classified into items, modifiers, discounts, taxes and totals. Quantities, unit prices, percentages and currency amounts are parsed into numbers.</p></article>
+        <article class="step-card"><span class="step-card__n">04</span><h3>Mathematical Validation</h3>
+          <p>Every equation the receipt asserts gets recomputed: qty × unit against line totals, items against the subtotal, subtotal − discount + tax against the grand total.</p></article>
+        <article class="step-card"><span class="step-card__n">05</span><h3>Visual Tampering Analysis</h3>
+          <p>Error-level analysis exposes re-compression residue from pasted regions, tone mapping spots patches whose background does not match, and typography metrics catch odd font sizes, baselines and spacing.</p></article>
+        <article class="step-card"><span class="step-card__n">06</span><h3>Suspicious Information Detection</h3>
+          <p>Logic and statistics check the rest: amount columns that stop aligning, duplicate lines, missing tax, implausible rates, round-number edits and low-confidence clusters.</p></article>
+        <article class="step-card"><span class="step-card__n">07</span><h3>Fraud Risk Report</h3>
+          <p>Findings are weighted by severity into a 0–100 risk score, then presented with the evidence behind each one and an exportable JSON payload.</p></article>
+      </div>
+
+      <div class="innovate">
+        <h3>Innovation</h3>
+        <p>It combines <strong>OCR</strong>, <strong>mathematical validation</strong> and <strong>image-based tampering detection</strong> instead of checking only the visual appearance of a receipt, making it useful for expense verification and fraud detection.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── LIMITS ───────────────────────── -->
+  <section class="limits" id="limits">
+    <div class="wrap">
+      <div class="section-head"><h2>What this can and cannot claim</h2></div>
+      <div class="limits__grid">
+        <div class="card">
+          <h4>It is evidence, not proof</h4>
+          <p>ReceiptShield is a heuristic triage tool. A flagged receipt is a reason to look closer, not a finding of fraud. Compression, scanning, glare and phone cameras all create artefacts that resemble tampering.</p>
+        </div>
+        <div class="card">
+          <h4>Where it is strongest</h4>
+          <p>Edited amounts, quantities or totals that break the arithmetic; text pasted from another font; patches whose background tone or noise does not match; and files that were re-saved by an image editor.</p>
+        </div>
+        <div class="card">
+          <h4>Where it is blind</h4>
+          <p>A forger who re-types the whole receipt in one font, keeps the arithmetic consistent and exports a clean PNG leaves little trace. Very low-resolution or heavily compressed receipts defeat the pixel-level stages.</p>
+        </div>
+        <div class="card">
+          <h4>Privacy</h4>
+          <p>Everything runs client-side. The receipt image is read locally through a canvas, the OCR engine is fetched from a CDN on first use, and nothing is transmitted to or stored on a server.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="wrap footer__in">
+    <div>
+      <p class="footer__brand">ReceiptShield</p>
+      <p class="footer__note">AI-based receipt fraud &amp; tampering detection. Runs fully in the browser.</p>
+    </div>
+    <p class="footer__meta">OCR powered by Tesseract.js · No account, no server, no data leaves this device.</p>
+  </div>
+</footer>
+
+<!-- Tesseract.js — global `Tesseract` -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+
+<script>
+/* ==========================================================================
+   ReceiptShield — util.js
+   Shared helpers: DOM, currency/number parsing, statistics, geometry.
+   Exposes window.RS.util
+   ========================================================================== */
+(function (global) {
+  'use strict';
+
+  const RS = (global.RS = global.RS || {});
+
+  /* ── DOM ─────────────────────────────────────────────────── */
+  const $ = (sel, root) => (root || document).querySelector(sel);
+  const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
+  const el = (tag, attrs, children) => {
+    const node = document.createElement(tag);
+    if (attrs) for (const k in attrs) {
+      if (k === 'class') node.className = attrs[k];
+      else if (k === 'text') node.textContent = attrs[k];
+      else if (k === 'html') node.innerHTML = attrs[k];
+      else node.setAttribute(k, attrs[k]);
+    }
+    (children || []).forEach((c) => c && node.appendChild(c));
+    return node;
+  };
+  const esc = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  /* ── currency ────────────────────────────────────────────── */
+  const CURRENCY = /(?:₹|rs\.?|inr|usd|sgd|aed|eur|gbp|chf|myr|thb|\$|€|£|¥)/gi;
+
+  /** Detect the dominant currency glyph in a block of text. */
+  function detectCurrency(text) {
+    if (/₹/.test(text)) return { symbol: '₹', code: 'INR' };
+    if (/\b(rs\.?|inr)\b/i.test(text)) return { symbol: '₹', code: 'INR' };
+    if (/€/.test(text) || /\beur\b/i.test(text)) return { symbol: '€', code: 'EUR' };
+    if (/£/.test(text) || /\bgbp\b/i.test(text)) return { symbol: '£', code: 'GBP' };
+    if (/\$/.test(text) || /\busd\b/i.test(text)) return { symbol: '$', code: 'USD' };
+    if (/¥/.test(text)) return { symbol: '¥', code: 'JPY' };
+    return { symbol: '', code: '' };
+  }
+
+  /**
+   * Parse a money-ish string into a number.
+   * Handles "₹1,500.00", "1.500,00" (European), "(120.00)" (negative),
+   * "1,234", "1500.5", "12 500.00" and trailing CR/DR markers.
+   * Returns NaN when there is no usable number.
+   */
+  function parseAmount(raw) {
+    if (raw == null) return NaN;
+    if (typeof raw === 'number') return raw;
+
+    let s = String(raw).trim();
+    if (!s) return NaN;
+
+    s = s.replace(CURRENCY, ' ');
+    let negative = false;
+    if (/^\(.*\)$/.test(s.trim())) { negative = true; s = s.replace(/[()]/g, ' '); }
+    if (/\b(?:cr|dr)\b\s*$/i.test(s)) negative = /cr\s*$/i.test(s.trim()); // credit = refund
+    if (/^\s*-/.test(s)) { negative = true; }
+
+    s = s.replace(/[^0-9.,]/g, '').replace(/^[.,]+/, '');
+    if (!s) return NaN;
+
+    const lastDot = s.lastIndexOf('.');
+    const lastComma = s.lastIndexOf(',');
+    const decSep = lastDot > lastComma ? '.' : (lastComma > lastDot ? ',' : '');
+
+    if (!decSep) {
+      // pure digits, possibly long — treat as integer
+      const n = Number(s.replace(/[.,]/g, ''));
+      return Number.isFinite(n) ? (negative ? -n : n) : NaN;
+    }
+
+    const intPart = s.slice(0, s.lastIndexOf(decSep)).replace(/[.,]/g, '');
+    const fracPart = s.slice(s.lastIndexOf(decSep) + 1);
+
+    // A single separator followed by exactly 3 digits is far more likely a
+    // thousands separator ("1,500") than a decimal ("1.500").
+    if (fracPart.length === 3 && intPart.length > 0 && (lastDot < 0 || lastComma < 0)) {
+      const merged = Number(intPart + fracPart);
+      return Number.isFinite(merged) ? (negative ? -merged : merged) : NaN;
+    }
+    // "1,50" or "1,5" -> decimal comma. Trailing "0" groups are separators.
+    const frac = fracPart.replace(/[.,].*$/, '');
+    if (frac.length > 3) {
+      const merged = Number(intPart + fracPart.replace(/[^0-9]/g, ''));
+      return Number.isFinite(merged) ? (negative ? -merged : merged) : NaN;
+    }
+
+    const n = Number((intPart || '0') + '.' + (frac || '0'));
+    if (!Number.isFinite(n)) return NaN;
+    return negative ? -n : n;
+  }
+
+  /** Extract every trailing/embedded money token from a string. */
+  function moneyTokens(text) {
+    const re = /(?:₹|rs\.?|inr|\$|€|£|¥)?\s*\(?-?\d[\d.,]*\)?(?:\s*(?:cr|dr))?/gi;
+    const out = [];
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const value = parseAmount(m[0]);
+      if (Number.isFinite(value) && /\d/.test(m[0])) {
+        out.push({ raw: m[0].trim(), value, index: m.index });
+      }
+      if (m.index === re.lastIndex) re.lastIndex++;
+    }
+    return out;
+  }
+
+  /** The last money-looking token on a line, or null. */
+  function trailingAmount(text) {
+    const tokens = moneyTokens(text);
+    if (!tokens.length) return null;
+    const last = tokens[tokens.length - 1];
+    // must actually sit at the end of the line (allow trailing junk like units)
+    const tail = text.slice(last.index + last.raw.length).replace(/[.\s:|\-–—_]+$/, '');
+    if (tail.length > 0 && !/^[a-z]{1,4}$/i.test(tail)) return null;
+    return { ...last, before: text.slice(0, last.index).trim() };
+  }
+
+  function fmtMoney(value, symbol) {
+    if (!Number.isFinite(value)) return '—';
+    const sym = symbol === undefined ? '' : symbol;
+    const fixed = Math.abs(value) >= 1000
+      ? value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : value.toFixed(2);
+    return (value < 0 ? '-' : '') + sym + fixed.replace('-', '');
+  }
+
+  function fmtDelta(value) {
+    if (!Number.isFinite(value)) return '—';
+    const s = value.toFixed(2);
+    return (value > 0 ? '+' : '') + s;
+  }
+
+  const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+  /* ── statistics ──────────────────────────────────────────── */
+  function median(values) {
+    const a = values.filter(Number.isFinite).slice().sort((x, y) => x - y);
+    if (!a.length) return NaN;
+    const mid = a.length >> 1;
+    return a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
+  }
+  function mean(values) {
+    const a = values.filter(Number.isFinite);
+    return a.length ? a.reduce((s, x) => s + x, 0) / a.length : NaN;
+  }
+  /** Median absolute deviation — robust spread measure. */
+  function mad(values) {
+    const med = median(values);
+    if (!Number.isFinite(med)) return NaN;
+    return median(values.filter(Number.isFinite).map((v) => Math.abs(v - med)));
+  }
+  /** Robust z-score using median/MAD (0.6745 scales MAD to sigma). */
+  function robustZ(value, med, spread) {
+    if (!Number.isFinite(value) || !Number.isFinite(med) || !Number.isFinite(spread)) return 0;
+    if (spread <= 1e-9) return value === med ? 0 : 999;
+    return (0.6745 * (value - med)) / spread;
+  }
+  function percentile(values, p) {
+    const a = values.filter(Number.isFinite).slice().sort((x, y) => x - y);
+    if (!a.length) return NaN;
+    const idx = Math.min(a.length - 1, Math.max(0, Math.round((p / 100) * (a.length - 1))));
+    return a[idx];
+  }
+
+  /* ── geometry ────────────────────────────────────────────── */
+  const box = (w) => ({ x: w.x0, y: w.y0, w: w.x1 - w.x0, h: w.y1 - w.y0 });
+  const boxArea = (b) => Math.max(0, b.w) * Math.max(0, b.h);
+  function overlapRatio(a, b) {
+    const x = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+    const y = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+    const inter = x * y;
+    const denom = Math.min(boxArea(a), boxArea(b));
+    return denom > 0 ? inter / denom : 0;
+  }
+
+  /* ── misc ────────────────────────────────────────────────── */
+  const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  RS.util = {
+    $, $$, el, esc, clamp, sleep, round2,
+    detectCurrency, parseAmount, moneyTokens, trailingAmount, fmtMoney, fmtDelta,
+    median, mean, mad, robustZ, percentile,
+    box, boxArea, overlapRatio,
+  };
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = RS.util;
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>
+/* ==========================================================================
+   ReceiptShield — samples.js
+   Builds two synthetic receipt files entirely on the client so the demo can
+   run with no network and no personal data:
+
+     genuine  — a clean, arithmetically consistent receipt
+     tampered — the same receipt after a forged "save": two amounts are pasted
+                in a different font, shifted off the amount column, over a
+                patch whose paper tone does not quite match, and sitting on a
+                re-compression boundary.
+
+   The tampered file is produced by first JPEG-encoding the genuine receipt
+   (simulating "the file as it was originally saved") and then drawing the
+   forged values on top of the decoded pixels. That is exactly the history
+   error-level analysis is designed to reveal.
+
+   Exposes window.RS.samples
+   ========================================================================== */
+(function (global) {
+  'use strict';
+
+  const RS = global.RS;
+  const U = RS.util;
+
+  const W = 900;
+  const PAD = 74;
+  const RIGHT = W - PAD;
+  const UNIT_COL = RIGHT - 190;
+  const PAPER = '#ffffff';
+  const FONT = '"Courier New", Courier, monospace';
+
+  /* ── the receipt document ────────────────────────────────── */
+  /**
+   * A block list drives both the renderer and the plain-text export, so the
+   * image and the text sample can never drift apart.
+   */
+  function genuineDoc() {
+    return [
+      { t: 'title', text: 'GRAND CAFÉ & CO.' },
+      { t: 'center', text: '12 Marine Drive, Mumbai 400020' },
+      { t: 'center', text: 'GSTIN: 27AABCU9603R1ZM' },
+      { t: 'rule' },
+      { t: 'kv', left: 'Invoice:', right: 'INV-2291' },
+      { t: 'kv', left: 'Date:', right: '12/03/2026 19:42' },
+      { t: 'rule' },
+      { t: 'label', text: 'ITEMS' },
+      { t: 'item', qty: '2', name: 'Filter Coffee', unit: 150.00, amount: 300.00 },
+      { t: 'item', qty: '1', name: 'Club Sandwich', unit: 200.00, amount: 200.00 },
+      { t: 'item', qty: '3', name: 'Masala Chai', unit: 30.00, amount: 90.00 },
+      { t: 'item', qty: '1', name: 'Chocolate Brownie', unit: 120.00, amount: 120.00 },
+      { t: 'rule' },
+      { t: 'kv', left: 'Subtotal', right: 710.00 },
+      { t: 'kv', left: 'Discount 5%', right: 35.50 },
+      { t: 'kv', left: 'Taxable Value', right: 674.50 },
+      { t: 'kv', left: 'CGST 2.5%', right: 16.86 },
+      { t: 'kv', left: 'SGST 2.5%', right: 16.86 },
+      { t: 'kv', left: 'Round Off', right: 0.28 },
+      { t: 'rule' },
+      { t: 'total', left: 'GRAND TOTAL', right: 708.50 },
+      { t: 'rule' },
+      { t: 'kv', left: 'Paid by:', right: 'UPI ****4417' },
+      { t: 'center', text: 'Thank you for visiting!' },
+    ];
+  }
+
+  /**
+   * Apply the fraud to a copy of the document.
+   * Two numbers change; both are marked `paste` so the renderer draws them the
+   * way a forger would — different typeface, nudged off the column, on top of
+   * a background patch lifted from somewhere else.
+   */
+  function tamper(doc) {
+    doc.forEach((b) => {
+      if (b.t === 'item' && b.name === 'Club Sandwich') {
+        b.amount = 700.00;   // printed line total no longer equals qty x unit (200.00)
+        b.paste = true;
+      }
+      if (b.t === 'total') {
+        b.right = 1708.50;   // ₹708.50 rewritten as ₹1,708.50
+        b.paste = true;
+      }
+    });
+    return doc;
+  }
+
+  const PASTE_STYLE = {
+    bg: '#f9f9ee',                 // paper tone that does not match the sheet
+    font: 'bold 25px Georgia, "Times New Roman", serif',
+    dx: 7,
+    dy: 1,
+  };
+
+  /** The imaging tool a real forgery is most often re-saved through. */
+  const EDITOR = 'Adobe Photoshop 24.0 (Windows)';
+
+  /* ── text export ─────────────────────────────────────────── */
+  function docToText(doc) {
+    const out = [];
+    // Only numeric rows are money. Invoice numbers, dates and payment names
+    // must be passed through untouched.
+    const amt = (v) => (typeof v === 'number' ? v.toFixed(2) : String(v === null || v === undefined ? '' : v));
+    doc.forEach((b) => {
+      if (b.t === 'rule') return;
+      if (b.t === 'kv') { out.push(padRow(b.left, amt(b.right))); return; }
+      if (b.t === 'item') {
+        const desc = b.qty + ' x ' + b.name;
+        out.push(padTriple(desc, amt(b.unit), amt(b.amount)));
+        return;
+      }
+      if (b.t === 'total') { out.push(padRow(b.left, amt(b.right))); return; }
+      if (b.t === 'title' || b.t === 'label') { out.push(b.text); return; }
+      out.push(b.text);
+    });
+    return out.join('\n');
+  }
+  function padRow(left, right) {
+    const width = 40;
+    const gap = Math.max(1, width - stripTags(left).length - String(right).length);
+    return left + ' '.repeat(gap) + right;
+  }
+  function padTriple(desc, unit, amount) {
+    const width = 46;
+    const gap = Math.max(1, width - desc.length - unit.length - amount.length);
+    return desc + ' '.repeat(gap) + unit + '  ' + amount;
+  }
+  const stripTags = (s) => String(s).replace(/<[^>]+>/g, '');
+
+  /* ── canvas helpers ──────────────────────────────────────── */
+  function blank(w, h, fill) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    if (fill) { ctx.fillStyle = fill; ctx.fillRect(0, 0, w, h); }
+    return c;
+  }
+
+  function drawDoc(doc) {
+    const LINE = 34;
+    const rough = 260 + doc.length * LINE;
+    const c = blank(W, rough, PAPER);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(0, 0, W, rough);
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#12161c';
+
+    let y = 96;
+    const pasteOps = [];
+
+    doc.forEach((b) => {
+      const pasted = !!b.paste;
+      const baseFont = '22px ' + FONT;
+
+      if (b.t === 'rule') {
+        ctx.strokeStyle = '#12161c';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(PAD, y - 12.5);
+        ctx.lineTo(RIGHT, y - 12.5);
+        ctx.stroke();
+        y += 16;
+        return;
+      }
+
+      // background patch first, so pasted text sits on mismatched paper
+      if (pasted) {
+        ctx.fillStyle = PASTE_STYLE.bg;
+        ctx.fillRect(PAD - 14 + PASTE_STYLE.dx, y + PASTE_STYLE.dy - 24, RIGHT - PAD + 28, 34);
+        ctx.fillStyle = '#12161c';
+      }
+
+      const dx = pasted ? PASTE_STYLE.dx : 0;
+      const dy = pasted ? PASTE_STYLE.dy : 0;
+      const font = pasted ? PASTE_STYLE.font : baseFont;
+      ctx.font = font;
+
+      if (b.t === 'title') {
+        ctx.font = 'bold 27px ' + FONT;
+        const w = ctx.measureText(b.text).width;
+        ctx.fillText(b.text, (W - w) / 2, y + dy);
+        y += 42;
+      } else if (b.t === 'center') {
+        const w = ctx.measureText(b.text).width;
+        ctx.fillText(b.text, (W - w) / 2, y + dy);
+        y += LINE;
+      } else if (b.t === 'label') {
+        ctx.font = 'bold 22px ' + FONT;
+        ctx.fillText(b.text, PAD, y + dy);
+        y += LINE - 4;
+      } else if (b.t === 'kv') {
+        ctx.fillText(b.left, PAD, y + dy);
+        rightAlign(ctx, String(b.right), RIGHT + dx, y + dy);
+        y += LINE;
+      } else if (b.t === 'item') {
+        ctx.fillText(b.qty + ' x ' + b.name, PAD, y + dy);
+        ctx.fillText(U.parseAmount(String(b.unit)).toFixed(2), UNIT_COL - ctx.measureText(U.parseAmount(String(b.unit)).toFixed(2)).width, y + dy);
+        rightAlign(ctx, U.parseAmount(String(b.amount)).toFixed(2), RIGHT + dx, y + dy);
+        y += LINE;
+      } else if (b.t === 'total') {
+        ctx.font = pasted ? PASTE_STYLE.font : 'bold 25px ' + FONT;
+        ctx.fillText(b.left, PAD, y + dy);
+        rightAlign(ctx, U.parseAmount(String(b.right)).toFixed(2), RIGHT + dx, y + dy);
+        y += 44;
+      }
+
+      if (pasted) {
+        pasteOps.push({
+          x0: PAD - 16 + PASTE_STYLE.dx,
+          x1: RIGHT + 16,
+          y0: y - 46 + PASTE_STYLE.dy,
+          y1: y + 6 + PASTE_STYLE.dy,
+        });
+      }
+    });
+
+    // trim to content
+    const height = Math.min(rough, Math.ceil(y + 70));
+    const out = blank(W, height, PAPER);
+    out.getContext('2d').drawImage(c, 0, 0);
+    const ctx2 = out.getContext('2d');
+    grainify(ctx2, W, height, 1.4);
+    return { canvas: out, pasteOps };
+  }
+
+  function rightAlign(ctx, text, right, y) {
+    ctx.fillText(text, right - ctx.measureText(text).width, y);
+  }
+
+  /** Very light paper grain so no region is mathematically flat. */
+  function grainify(ctx, w, h, amp) {
+    const img = ctx.getImageData(0, 0, w, h);
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i] > 250 && d[i + 1] > 250 && d[i + 2] > 250 && Math.random() < 0.35) continue;
+      const n = (Math.random() - 0.5) * 2 * amp;
+      d[i] += n; d[i + 1] += n; d[i + 2] += n;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  /* ── JPEG round-trip ─────────────────────────────────────── */
+  /** Encode a canvas to JPEG and decode it back, giving it real JPEG history. */
+  function jpegRoundTrip(canvas, quality) {
+    return new Promise((resolve) => {
+      canvas.toBlob(async (blob) => {
+        const bmp = await createImageBitmap(blob);
+        const c = blank(canvas.width, canvas.height);
+        c.getContext('2d').drawImage(bmp, 0, 0);
+        bmp.close();
+        resolve(c);
+      }, 'image/jpeg', quality);
+    });
+  }
+
+  /**
+   * Export as PNG. Lossless on purpose: the two forged regions carry a different
+   * compression history from the rest of the sheet, and a lossy export would
+   * homogenise it and erase the very evidence error-level analysis looks for.
+   * Pass `software` to stamp the file the way an image editor would.
+   */
+  function toPng(canvas, software) {
+    return new Promise((resolve) => {
+      canvas.toBlob(async (blob) => {
+        const bytes = await blob.arrayBuffer();
+        const out = software
+          ? new Blob([injectPngText(bytes, 'Software', software)], { type: 'image/png' })
+          : blob;
+        resolve({ url: URL.createObjectURL(out), blob: out, name: 'receipt.png', type: 'image/png' });
+      }, 'image/png');
+    });
+  }
+
+  const CRC_TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(bytes) {
+    let c = 0xffffffff;
+    for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  }
+
+  /**
+   * Insert a tEXt chunk after IHDR. This is how a PNG records the software that
+   * wrote it, and it is what the suspicious-file check looks for.
+   */
+  function injectPngText(buffer, keyword, text) {
+    const bytes = new Uint8Array(buffer);
+    const SIG = [137, 80, 78, 71, 13, 10, 26, 10];
+    if (bytes.length < 33 || !SIG.every((b, i) => bytes[i] === b)) return buffer;
+    if (bytes[12] !== 0x49 || bytes[13] !== 0x48 || bytes[14] !== 0x44 || bytes[15] !== 0x52) return buffer;
+
+    const ihdrLen = (bytes[8] << 24) | (bytes[9] << 16) | (bytes[10] << 8) | bytes[11];
+    const insertAt = 8 + 4 + 4 + ihdrLen + 4;   // right after the IHDR chunk
+
+    const payload = new Uint8Array(new TextEncoder().encode(keyword + '\u0000' + text));
+    const chunk = new Uint8Array(4 + 4 + payload.length + 4);
+    const view = new DataView(chunk.buffer);
+    view.setUint32(0, payload.length);
+    chunk[4] = 0x74; chunk[5] = 0x45; chunk[6] = 0x58; chunk[7] = 0x74;  // 'tEXt'
+    chunk.set(payload, 8);
+    view.setUint32(8 + payload.length, crc32(chunk.subarray(4, 8 + payload.length)));
+
+    const out = new Uint8Array(bytes.length + chunk.length);
+    out.set(bytes.subarray(0, insertAt), 0);
+    out.set(chunk, insertAt);
+    out.set(bytes.subarray(insertAt), insertAt + chunk.length);
+    return out.buffer;
+  }
+
+  /* ── public API ──────────────────────────────────────────── */
+  /**
+   * Build a sample receipt.
+   * @param {'genuine'|'tampered'} kind
+   * @returns {Promise<{url, blob, name, text, truth}>}
+   */
+  async function build(kind) {
+    const doc = kind === 'tampered' ? tamper(genuineDoc()) : genuineDoc();
+    const text = docToText(doc);
+
+    let working = { canvas: drawDoc(doc).canvas, pasteOps: [] };
+    let file;
+
+    if (kind === 'tampered') {
+      // The sheet was forwarded as a heavily re-compressed JPEG long before the
+      // forgery landed, so its pixels are smoothed and its high-frequency detail
+      // is gone. The snippet the forger pasted came from somewhere else at high
+      // quality, so it carries a different compression history — and it is that
+      // mismatch, preserved in the lossless export, that error-level analysis
+      // measures.
+      const aged = await jpegRoundTrip(working.canvas, 0.70);
+      const forgedRaw = drawDoc(doc);
+      const forged = { canvas: await jpegRoundTrip(forgedRaw.canvas, 0.95), pasteOps: forgedRaw.pasteOps };
+
+      const base = blank(W, aged.height);
+      const bctx = base.getContext('2d', { willReadFrequently: true });
+      bctx.drawImage(aged, 0, 0);
+      forged.pasteOps.forEach((op) => {
+        const sx = Math.max(0, U.clamp(op.x0 - 14, 0, base.width));
+        const sy = Math.max(0, U.clamp(op.y0 - 12, 0, base.height));
+        const sw = Math.min(op.x1 - op.x0 + 30, base.width - sx);
+        const sh = Math.min(op.y1 - op.y0 + 26, base.height - sy);
+        if (sw <= 0 || sh <= 0) return;
+        bctx.drawImage(forged.canvas, sx, sy, sw, sh, sx, sy, sw, sh);
+      });
+
+      working.pasteOps = forged.pasteOps;
+      file = await toPng(base, EDITOR);
+    } else {
+      file = await toPng(working.canvas);
+    }
+    return {
+      ...file,
+      text,
+      truth: {
+        kind,
+        note: kind === 'tampered'
+          ? 'Two amounts were rewritten: “Club Sandwich” line total ₹200.00 → ₹700.00 and “GRAND TOTAL” ₹708.50 → ₹1,708.50, pasted over an already-compressed copy of the receipt and re-saved through an image editor.'
+          : 'A clean, arithmetically consistent receipt with no edits.',
+        regions: working.pasteOps || [],
+        expectedTotal: kind === 'tampered' ? 1708.50 : 708.50,
+      },
+    };
+  }
+
+  /** The forged document on its own, for the text-mode sample. */
+  function tamperedDoc() { return tamper(genuineDoc()); }
+
+  RS.samples = { build, genuineDoc, tamperedDoc, docToText, injectPngText };
+})(window);
+</script>
+<script>
+/* ==========================================================================
+   ReceiptShield — ocr.js
+   Stage 2: OCR extraction.
+
+   Wraps Tesseract.js in a single reusable worker and turns its word-level TSV
+   output into something the rest of the pipeline can reason about: words with
+   bounding boxes, baselines and confidence, grouped into lines and blocks,
+   plus per-line typographic metrics used later for tamper detection.
+
+   Exposes window.RS.ocr
+   ========================================================================== */
+(function (global) {
+  'use strict';
+
+  const RS = global.RS;
+  const U = RS.util;
+
+  let workerPromise = null;
+  let currentLogger = null;
+
+  /** Is the Tesseract library on the page? */
+  function available() {
+    return typeof global.Tesseract !== 'undefined' && typeof global.Tesseract.createWorker === 'function';
+  }
+
+  const PHASES = [
+    [/loading tesseract core/i, 'Loading OCR engine'],
+    [/initializing tesseract/i, 'Starting OCR engine'],
+    [/loading language traineddata/i, 'Downloading language data'],
+    [/initializing api/i, 'Initialising recogniser'],
+    [/recognizing text/i, 'Reading the receipt'],
+  ];
+  function phaseLabel(status) {
+    for (const [re, label] of PHASES) if (re.test(status || '')) return label;
+    return status ? String(status) : 'Working…';
+  }
+
+  /** Lazily create (and memoise) the shared Tesseract worker. */
+  function ensureWorker() {
+    if (workerPromise) return workerPromise;
+    if (!available()) {
+      return Promise.reject(new Error(
+        'The OCR engine could not be loaded from the CDN. Check your connection, ' +
+        'or switch to “Paste text” mode to run the validation engine on its own.'
+      ));
+    }
+    workerPromise = (async () => {
+      const worker = await global.Tesseract.createWorker('eng', 1, {
+        logger: (m) => { if (currentLogger) currentLogger(m); },
+        errorHandler: (e) => console.error('[tesseract]', e),
+      });
+      await worker.setParameters({
+        tessedit_pageseg_mode: '6',        // assume a single uniform block of text
+        preserve_interword_spaces: '1',
+        user_defined_dpi: '300',
+      });
+      return worker;
+    })().catch((err) => {
+      workerPromise = null;               // allow a retry after a failed load
+      throw err;
+    });
+    return workerPromise;
+  }
+
+  /**
+   * Prepare an OCR-friendly copy of the receipt. The original pixels are left
+   * untouched — visual forensics must analyse what the user actually has.
+   */
+  function preprocess(source, targetWidth) {
+    const sw = source.width || source.naturalWidth;
+    const sh = source.height || source.naturalHeight;
+    const scale = U.clamp((targetWidth || 2000) / sw, 1, 3);
+    const w = Math.round(sw * scale);
+    const h = Math.round(sh * scale);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(source, 0, 0, w, h);
+
+    // Grayscale + percentile contrast stretch: receipts are usually low-contrast
+    // scans where this measurably improves recognition.
+    const img = ctx.getImageData(0, 0, w, h);
+    const d = img.data;
+    const hist = new Uint32Array(256);
+    for (let i = 0; i < d.length; i += 4) {
+      const g = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0;
+      d[i] = d[i + 1] = d[i + 2] = g;
+      hist[g]++;
+    }
+    const total = (w * h) || 1;
+    let lo = 0, hi = 255, acc = 0;
+    for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc > total * 0.02) { lo = v; break; } }
+    acc = 0;
+    for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc > total * 0.02) { hi = v; break; } }
+    const span = Math.max(1, hi - lo);
+    const lut = new Uint8ClampedArray(256);
+    for (let v = 0; v < 256; v++) lut[v] = U.clamp(((v - lo) * 255) / span, 0, 255);
+    for (let i = 0; i < d.length; i += 4) {
+      const g = lut[d[i]];
+      d[i] = d[i + 1] = d[i + 2] = g;
+    }
+    ctx.putImageData(img, 0, 0);
+    return canvas;
+  }
+
+  /* ── TSV → structured words ──────────────────────────────── */
+  const TSV_HEADER = ['level', 'page_num', 'block_num', 'par_num', 'line_num', 'word_num',
+    'left', 'top', 'width', 'height', 'conf', 'text'];
+
+  function parseTsv(tsv) {
+    const words = [];
+    if (!tsv) return words;
+    const rows = String(tsv).split(/\r?\n/);
+    let start = rows.length && /level/.test(rows[0]) ? 1 : 0;
+    for (let i = start; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row) continue;
+      const cols = row.split('\t');
+      if (cols.length < 12) continue;
+      if (cols[0] !== '5') continue;                 // 5 = word level
+      const text = cols[11];
+      if (!text || !text.trim()) continue;
+      const conf = Number(cols[10]);
+      const left = Number(cols[6]), top = Number(cols[7]);
+      const width = Number(cols[8]), height = Number(cols[9]);
+      if (![left, top, width, height].every(Number.isFinite)) continue;
+      const blockKey = cols[2] + '-' + cols[3];
+      const lineKey = blockKey + '-' + cols[4];
+      words.push({
+        text,
+        conf: Number.isFinite(conf) && conf >= 0 ? conf : 0,
+        x0: left, y0: top, x1: left + width, y1: top + height,
+        lineKey, blockKey,
+        index: Number(cols[5]),
+      });
+    }
+    return words;
+  }
+
+  /** Group words into lines and derive per-line geometry + typography metrics. */
+  function groupWords(words) {
+    const byLine = new Map();
+    words.forEach((w) => {
+      if (!byLine.has(w.lineKey)) byLine.set(w.lineKey, []);
+      byLine.get(w.lineKey).push(w);
+    });
+
+    const lines = [];
+    byLine.forEach((ws, key) => {
+      ws.sort((a, b) => a.x0 - b.x0);
+      const heights = ws.map((w) => w.y1 - w.y0);
+      const hMed = U.median(heights);
+      const baseline = U.median(ws.map((w) => w.y1));
+      const text = joinWords(ws);
+      const gaps = [];
+      for (let i = 1; i < ws.length; i++) gaps.push(ws[i].x0 - ws[i - 1].x1);
+
+      lines.push({
+        key,
+        words: ws,
+        text,
+        x0: Math.min(...ws.map((w) => w.x0)),
+        x1: Math.max(...ws.map((w) => w.x1)),
+        y0: Math.min(...ws.map((w) => w.y0)),
+        y1: Math.max(...ws.map((w) => w.y1)),
+        height: hMed,
+        baseline,
+        center: ws.reduce((s, w) => s + (w.y0 + w.y1) / 2, 0) / ws.length,
+        conf: U.mean(ws.map((w) => w.conf)),
+        minConf: Math.min(...ws.map((w) => w.conf)),
+        width: Math.max(...ws.map((w) => w.x1)) - Math.min(...ws.map((w) => w.x0)),
+        gaps,
+      });
+    });
+
+    lines.sort((a, b) => (a.y0 - b.y0) || (a.x0 - b.x0));
+    return lines;
+  }
+
+  /** Rebuild a line of text, restoring a space where the words were far apart. */
+  function joinWords(ws) {
+    let out = '';
+    for (let i = 0; i < ws.length; i++) {
+      const w = ws[i];
+      if (i === 0) { out = w.text; continue; }
+      const prev = ws[i - 1];
+      const gap = w.x0 - prev.x1;
+      const ref = Math.max(1, U.median(ws.map((x) => x.y1 - x.y0)));
+      const spaces = gap > ref * 1.6 ? (gap > ref * 4 ? 4 : 2) : 1;
+      out += ' '.repeat(spaces) + w.text;
+    }
+    return out;
+  }
+
+  /**
+   * Run OCR over an image source (canvas / bitmap / img / blob url).
+   * @returns {Promise<{text,words,lines,width,height,conf,scale}>}
+   */
+  async function recognize(source, onProgress) {
+    const worker = await ensureWorker();
+    const sw = source.width || source.naturalWidth;
+    const sh = source.height || source.naturalHeight;
+    if (!sw || !sh) throw new Error('The image has no usable dimensions.');
+
+    const prepared = preprocess(source, 2000);
+    currentLogger = (m) => {
+      if (!onProgress) return;
+      onProgress({
+        phase: phaseLabel(m.status),
+        progress: typeof m.progress === 'number' ? m.progress : 0,
+        raw: m.status,
+      });
+    };
+
+    let result;
+    try {
+      result = await worker.recognize(prepared, {}, { tsv: true, blocks: true });
+    } finally {
+      currentLogger = null;
+    }
+
+    const data = (result && result.data) || {};
+    let words = parseTsv(data.tsv);
+
+    // Fallback for engine builds that return the structured object instead.
+    if (!words.length && Array.isArray(data.words)) {
+      words = data.words
+        .filter((w) => w && w.text && w.text.trim())
+        .map((w, i) => ({
+          text: w.text,
+          conf: Number.isFinite(w.confidence) ? w.confidence : 0,
+          x0: w.bbox.x0, y0: w.bbox.y0, x1: w.bbox.x1, y1: w.bbox.y1,
+          lineKey: 'fb-line-' + i,
+          blockKey: 'fb-block-' + i,
+          index: i,
+        }));
+    }
+
+    const scale = prepared.width / sw;
+    words.forEach((w) => {
+      w.x0 /= scale; w.x1 /= scale; w.y0 /= scale; w.y1 /= scale;
+    });
+
+    const lines = groupWords(words);
+    const text = (data.text || lines.map((l) => l.text).join('\n')).replace(/[ \t]+$/gm, '');
+    const conf = words.length ? U.mean(words.map((w) => w.conf)) : 0;
+
+    return {
+      text,
+      words,
+      lines,
+      width: sw,
+      height: sh,
+      conf,
+      scale,
+      empty: !words.length,
+    };
+  }
+
+  async function terminate() {
+    if (!workerPromise) return;
+    try {
+      const w = await workerPromise;
+      await w.terminate();
+    } catch (e) { /* nothing to clean up */ }
+    workerPromise = null;
+  }
+
+  RS.ocr = { available, recognize, ensureWorker, terminate, preprocess };
+})(window);
+</script>
+<script>
+/* ==========================================================================
+   ReceiptShield — parse.js
+   Stage 3: item / price / tax detection.
+
+   Turns raw text (plus OCR geometry when available) into a structured receipt:
+   line items with quantity, unit price and line total; discount, tax and
+   rounding rows; and the totals the document claims to assert.
+
+   Every value keeps a back-reference to the line and, when present, the exact
+   OCR word box it came from, because stage 5 reasons about alignment,
+   type size and confidence of those very boxes.
+
+   Exposes window.RS.parse
+   ========================================================================== */
+(function (global) {
+  'use strict';
+
+  const RS = global.RS;
+  const U = RS.util;
+
+  /* ── number scanning ─────────────────────────────────────── */
+  const CURRENCY_TOKEN = /(?:₹|Rs\.?|INR|\$|€|£|¥)/i;
+
+  /** Blank out dates and times so their digits are never read as amounts. */
+  function maskDatesTimes(text) {
+    return text
+      .replace(/\b\d{1,4}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b/g, (m) => ' '.repeat(m.length))
+      .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm)?\b/gi, (m) => ' '.repeat(m.length))
+      .replace(/\b\d{1,2}\s*(?:am|pm)\b/gi, (m) => ' '.repeat(m.length));
+  }
+
+  const AMOUNT_RE = new RegExp([
+    '(?:₹|Rs\\.?|INR|\\$|€|£|¥)\\s*-?\\(?\\d[\\d,]*(?:\\.\\d{1,2})?\\)?', // symbol-led
+    '-?\\(?\\d{1,3}(?:[,\\u00a0 ]\\d{2,3})+(?:\\.\\d{1,2})?\\)?',        // grouped
+    '-?\\(?\\d+\\.\\d{1,2}\\)?',                                          // decimal
+    '-?\\(?\\d{2,7}\\)?',                                                // bare integer
+  ].join('|'), 'gi');
+
+  function isBoundaryBefore(ch) {
+    return !ch || !/[0-9A-Za-z.,\/]/.test(ch);
+  }
+  function isBoundaryAfter(ch) {
+    return !ch || !/[0-9A-Za-z.,\/:%]/.test(ch);
+  }
+
+  /**
+   * Find money-looking tokens with their positions.
+   * Boundary tests plus date/time masking are what keep invoice ids,
+   * GSTINs, phone numbers and tax rates out of the amount list.
+   */
+  function scanAmounts(rawText, opts) {
+    const relaxed = !!(opts && opts.relaxed);
+    // maskDatesTimes preserves length, so the second pass can safely rebuild a
+    // decimal separator that OCR misread as a colon ("35:5" for "35.5").
+    const text = maskDatesTimes(rawText).replace(/(\d)[:;](\d{1,2})(?=\s|$)/g, '$1.$2');
+    const out = [];
+    AMOUNT_RE.lastIndex = 0;
+    let m;
+    while ((m = AMOUNT_RE.exec(text)) !== null) {
+      if (m.index === AMOUNT_RE.lastIndex) AMOUNT_RE.lastIndex++;
+      const token = m[0];
+      const before = text[m.index - 1];
+      const after = text[m.index + token.length];
+      if (!isBoundaryBefore(before) || !isBoundaryAfter(after)) continue;
+      if (!/\d/.test(token)) continue;
+
+      const digits = token.replace(/[^0-9]/g, '');
+      const hasSymbol = CURRENCY_TOKEN.test(token);
+      const hasDecimal = /\.\d{1,2}\)?$/.test(token.trim());
+      const hasGrouping = /[\d][,\u00a0 ]\d{2,3}/.test(token);
+      // Without a currency symbol, a decimal point or digit grouping, a short
+      // integer is a quantity or a percentage and a long one is an identifier:
+      // a postal code, phone number, invoice id or tax registration number.
+      // On a row we already know is a money row (subtotal, tax, total), a bare
+      // integer is accepted because "Subtotal 710" is a perfectly normal print.
+      if (!hasSymbol && !hasDecimal && !hasGrouping) {
+        if (digits.length >= 6) continue;
+        if (digits.length <= 3 && !relaxed) continue;
+      }
+
+      const value = U.parseAmount(token);
+      if (!Number.isFinite(value)) continue;
+      out.push({
+        raw: token.trim(),
+        value,
+        index: m.index,
+        end: m.index + token.length,
+        hasSymbol,
+        hasDecimal,
+      });
+    }
+    return out;
+  }
+
+  /** Repair the classic OCR digit confusions inside an obviously numeric token. */
+  function fixNumericToken(token) {
+    const digits = (token.match(/\d/g) || []).length;
+    const letters = (token.match(/[A-Za-z]/g) || []).length;
+    if (!digits || letters === 0 || letters > digits) return token;
+    return token
+      .replace(/[OoQ]/g, '0')
+      .replace(/[Il|]/g, '1')
+      .replace(/[Ss]/g, '5')
+      .replace(/[Bb]/g, '8')
+      .replace(/[Zz]/g, '2');
+  }
+
+  /* ── line classifiers ────────────────────────────────────── */
+  const rateOf = (text) => {
+    const m = text.match(/(\d{1,2}(?:\.\d{1,2})?)\s*%/);
+    return m ? Number(m[1]) : null;
+  };
+
+  const RULES = [
+    { key: 'roundOff', kind: 'roundoff', re: /^round(?:ing)?[\s\-_.]*off\b/i },
+    { key: 'taxable', kind: 'taxable', re: /^(?:taxable\s+(?:value|amount|total)|net\s+(?:amount|total)|amount\s+before\s+tax|pre[\s\-]?tax\s+total)\b/i },
+    { key: 'subtotal', kind: 'subtotal', re: /^(?:sub[\s\-_.]*total|total\s+before\s+(?:tax|discount)|gross\s+total)\b/i },
+    { key: 'discount', kind: 'discount', re: /^(?:disc(?:ount)?\b|less\b|savings?\b|promo(?:tion)?\b|coupon\b|offer\b|rebate\b|voucher\b)/i },
+    { key: 'tax', kind: 'tax', re: /^\s*(?:cgst|sgst|igst|utgst|gst|vat|hst|pst|qst|cess|service\s+tax|sales\s+tax|tax|swachh\s+?bharat\s+cess)\b/i },
+    { key: 'total', kind: 'total', re: /^(?:grand\s+total|total\s+(?:due|payable|amount)|amount\s+(?:due|payable)|balance\s+due|net\s+payable|invoice\s+total|bill\s+amount|total)\b/i },
+    { key: 'tendered', kind: 'tendered', re: /^(?:cash|card|credit\s+card|debit\s+card|upi|netbanking|wallet|paid|tendered|payment|amount\s+paid|received|round\s?up)\b/i },
+    { key: 'change', kind: 'change', re: /^(?:change|balance|due\s+back|return|refund)\b/i },
+  ];
+
+  const META_PATTERNS = [
+    { key: 'invoiceNo', re: /^(?:invoice|inv|bill|receipt|order|ref|txn|transaction|token)\s*(?:no\.?|number|#|id)?\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9\-\/]{2,})/i },
+    { key: 'date', re: /\b(?:date|dt)\b\s*[:\-]?\s*(\d{1,4}[\/.\-]\d{1,2}[\/.\-]\d{2,4})/i },
+    { key: 'time', re: /\b(?:time)\b\s*[:\-]?\s*(\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm)?)/i },
+    { key: 'gstin', re: /\b([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]{3})\b/i },
+    // Phone numbers only: no spaces allowed inside, and at least eight digits,
+    // otherwise "00    700" from a column of amounts reads as a phone number.
+    { key: 'phone', re: /\b(\+?\d{2}[\d\-()]{6,}\d)\b/ },
+    { key: 'payment', re: /\b(upi|visa|mastercard|amex|rupay|card|netbanking|wallet|paytm|phonepe|gpay)\b/i },
+  ];
+
+  function classify(lineText) {
+    const t = lineText.trim();
+    if (!t) return { kind: 'blank' };
+    if (/^[\-=_*·•~\s]{3,}$/.test(t)) return { kind: 'rule' };
+    // A payment-method row is metadata even though it starts with "paid":
+    // it names a channel, and any digits on it are a masked card number.
+    if (/\b(?:paid\s+by|paid\s+via|payment\s+(?:method|mode)|tender\s+type|card\s*(?:no\.?|#)|upi|visa|mastercard|amex|rupay)\b/i.test(t)
+        && !/\d[\d,]*\.\d{2}/.test(t)) {
+      return { kind: 'meta', key: 'payment', value: t.replace(/\s{2,}/g, ' ').trim() };
+    }
+    for (const r of RULES) if (r.re.test(t)) return { kind: r.kind, key: r.key };
+    for (const p of META_PATTERNS) {
+      const m = t.match(p.re);
+      if (m) return { kind: 'meta', key: p.key, value: m[1] };
+    }
+    return { kind: 'text' };
+  }
+
+  /* ── item parsing ────────────────────────────────────────── */
+  const MONEY_ROWS = ['subtotal', 'taxable', 'discount', 'tax', 'total', 'tendered', 'change', 'roundoff'];
+
+  const QTY_PREFIX = /^\s*(\d{1,3}(?:\.\d{1,2})?)\s*(?:x|×|\*|@|nos?\.?|pcs?\.?|qty\.?)\s+/i;
+  const QTY_BARE = /^\s*(\d{1,3})\s+(?=[A-Za-z])/;
+
+  function parseItemLine(text, amounts, geo) {
+    const tokens = amounts.slice().sort((a, b) => a.index - b.index);
+    if (!tokens.length) return null;
+
+    const last = tokens[tokens.length - 1];
+    const second = tokens.length > 1 ? tokens[tokens.length - 2] : null;
+
+    // the printed line total must be the final token on the line
+    const tail = text.slice(last.end).replace(/[\s.\-–—_|:]*$/, '');
+    if (tail.length > 0 && !/^[A-Za-z%]{1,4}$/.test(tail)) return null;
+
+    let name = text.slice(0, second ? second.index : last.index);
+    let qty = null;
+    let unit = null;
+    let amount = last.value;
+
+    const qm = name.match(QTY_PREFIX);
+    if (qm) {
+      qty = U.parseAmount(qm[1]);
+      name = name.slice(qm[0].length);
+    } else {
+      const qb = name.match(QTY_BARE);
+      if (qb) {
+        qty = U.parseAmount(qb[1]);
+        name = name.slice(qb[0].length);
+      }
+    }
+
+    // A second trailing number is the unit-price column. Take it as printed even
+    // when it disagrees with the line total — that disagreement is the finding.
+    let unitStated = false;
+    if (second && Number.isFinite(second.value) && second.value > 0) {
+      const cand = second.value;
+      unit = cand;
+      unitStated = true;
+      if (qty === null) {
+        const ratio = amount / cand;
+        const ri = Math.round(ratio);
+        if (ri >= 1 && ri <= 99 && Math.abs(ratio - ri) <= 0.02) qty = ri;
+      }
+    }
+
+    name = name
+      .replace(/[\s.\-–—_|:]+$/, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+
+    if (!name || !/[A-Za-z]/.test(name)) return null;
+    if (name.length > 60) return null;
+
+    const derived = !unitStated;
+    if (derived) {
+      const q = qty === null ? 1 : qty;
+      unit = q > 0 ? U.round2(amount / q) : amount;
+    }
+
+    return {
+      name,
+      qty: qty === null ? 1 : qty,
+      qtyStated: qty !== null,
+      unit,
+      unitStated,
+      unitDerived: derived,
+      amount,
+      raw: text.trim(),
+      geo: geo || null,
+    };
+  }
+
+  /* ── geometry helpers ────────────────────────────────────── */
+  /** Box/confidence of the nth word from the end of an OCR line. */
+  function wordFromEnd(line, n) {
+    if (!line || !line.words || !line.words.length) return null;
+    const idx = line.words.length - 1 - (n || 0);
+    if (idx < 0) return null;
+    const w = line.words[idx];
+    return {
+      text: w.text,
+      conf: w.conf,
+      x0: w.x0, x1: w.x1, y0: w.y0, y1: w.y1,
+      height: w.y1 - w.y0,
+      baseline: w.y1,
+    };
+  }
+
+  /* ── main ────────────────────────────────────────────────── */
+  /**
+   * @param {{lines?:Array, text:string, source?:string}} input
+   * @returns structured receipt
+   */
+  function parse(input) {
+    const rawText = (input && input.text) || '';
+    let lines = (input && input.lines) || [];
+    if (!lines.length) {
+      lines = rawText.split(/\r?\n/).map((text, i) => ({
+        key: 'txt-' + i, text, words: [], x0: 0, x1: 0, y0: 0, y1: 0,
+        height: 0, baseline: 0, conf: null, minConf: null, width: 0, gaps: [],
+      }));
+    }
+
+    const currency = U.detectCurrency(rawText + ' ' + lines.map((l) => l.text).join(' '));
+
+    const items = [];
+    const taxes = [];
+    const adjustments = [];
+    const meta = {};
+    const misc = [];
+    const suspiciousText = [];
+
+    lines.forEach((line, lineIndex) => {
+      const text = (line.text || '').replace(/\s+$/, '');
+      if (!text.trim()) return;
+
+      const cls = classify(text);
+      if (cls.kind === 'rule' || cls.kind === 'blank') return;
+
+      const isMoneyRow = MONEY_ROWS.indexOf(cls.kind) !== -1;
+      const amountTokens = scanAmounts(text, { relaxed: isMoneyRow });
+      // Prefer the numerically repaired reading when OCR clearly mangled a figure.
+      amountTokens.forEach((t) => {
+        const fixed = fixNumericToken(t.raw);
+        if (fixed !== t.raw) {
+          const v = U.parseAmount(fixed);
+          if (Number.isFinite(v)) { t.raw = fixed; t.value = v; t.repaired = true; }
+        }
+      });
+
+      const geo = {
+        lineIndex,
+        lineY: line.y0,
+        lineHeight: line.height,
+        conf: line.conf,
+        minConf: line.minConf,
+        lastWord: wordFromEnd(line, 0),
+        unitWord: wordFromEnd(line, 1),
+      };
+
+      if (cls.kind === 'meta') {
+        if (cls.value && !meta[cls.key]) meta[cls.key] = cls.value;
+        if (amountTokens.length) {
+          misc.push({ lineIndex, text: text.trim(), amounts: amountTokens.map((a) => a.value) });
+        }
+        return;
+      }
+
+      if (isMoneyRow) {
+        if (!amountTokens.length) {
+          suspiciousText.push({ lineIndex, text: text.trim(), reason: 'label without an amount' });
+          return;
+        }
+        const amountToken = amountTokens[amountTokens.length - 1];
+        const amount = amountToken.value;
+        const rate = rateOf(text);
+        // The label is the row's words with its figure removed, so the report
+        // reads "CGST 2.5%" rather than a column of spaces.
+        const label = (text.slice(0, amountToken.index) + text.slice(amountToken.end))
+          .replace(/\s{2,}/g, ' ').replace(/[\s.:|\-–—_]+$/, '').trim() || cls.kind;
+        const entry = {
+          kind: cls.kind,
+          key: cls.key,
+          label,
+          amount,
+          rate,
+          lineIndex,
+          geo: { ...geo, amountWord: wordFromEnd(line, 0) },
+          raw: text.trim(),
+        };
+        if (cls.kind === 'tax') taxes.push(entry);
+        else if (cls.kind === 'total') meta.__total = entry;
+        else if (cls.kind === 'subtotal') meta.__subtotal = entry;
+        else if (cls.kind === 'taxable') meta.__taxable = entry;
+        else if (cls.kind === 'discount') adjustments.push(entry);
+        else if (cls.kind === 'roundoff') meta.__roundOff = entry;
+        else if (cls.kind === 'tendered') meta.__tendered = entry;
+        else if (cls.kind === 'change') meta.__change = entry;
+        return;
+      }
+
+      // plain text line — candidate item
+      const item = parseItemLine(text, amountTokens, geo);
+      if (item) {
+        item.lineIndex = lineIndex;
+        // Straighten the geometry out for stage 5: the amount is the last word
+        // on the line, the unit price is the one before it.
+        item.geo = { ...geo, amountWord: geo.lastWord };
+        items.push(item);
+      } else if (amountTokens.length === 0) {
+        if (!meta.merchant && /[A-Za-z]{2,}/.test(text) && text.trim().length <= 48 && lineIndex < 6) {
+          meta.merchant = text.trim().replace(/^[^A-Za-z0-9]+/, '');
+        } else if (!/^[\d\s\W]*$/.test(text)) {
+          misc.push({ lineIndex, text: text.trim() });
+        }
+      } else {
+        misc.push({ lineIndex, text: text.trim(), amounts: amountTokens.map((a) => a.value) });
+      }
+    });
+
+    const totals = {
+      subtotal: meta.__subtotal ? meta.__subtotal.amount : null,
+      taxable: meta.__taxable ? meta.__taxable.amount : null,
+      discount: adjustments.filter((a) => a.kind === 'discount').reduce((s, a) => s + a.amount, 0) || null,
+      tax: taxes.length ? taxes.reduce((s, t) => s + t.amount, 0) : null,
+      roundOff: meta.__roundOff ? meta.__roundOff.amount : null,
+      total: meta.__total ? meta.__total.amount : null,
+      tendered: meta.__tendered ? meta.__tendered.amount : null,
+      change: meta.__change ? meta.__change.amount : null,
+    };
+
+    const fields = {
+      subtotal: meta.__subtotal || null,
+      taxable: meta.__taxable || null,
+      total: meta.__total || null,
+      roundOff: meta.__roundOff || null,
+      tendered: meta.__tendered || null,
+      change: meta.__change || null,
+    };
+
+    const itemsSum = U.round2(items.reduce((s, i) => s + i.amount, 0));
+
+    return {
+      currency,
+      meta,
+      items,
+      taxes,
+      adjustments,
+      totals,
+      fields,
+      itemsSum,
+      misc,
+      suspiciousText,
+      counts: { lines: lines.length, items: items.length, taxes: taxes.length, adjustments: adjustments.length },
+      source: (input && input.source) || 'image',
+    };
+  }
+
+  RS.parse = { parse, scanAmounts, classify, maskDatesTimes, fixNumericToken };
+})(window);
+</script>
+<script>
+/* ==========================================================================
+   ReceiptShield — validate.js
+   Stage 4: mathematical validation.
+
+   Every equation the receipt asserts is recomputed from the numbers the
+   document itself prints, then compared with the printed answer. Nothing is
+   taken on trust: if a document says qty × unit = line total, or that
+   items − discount + tax = grand total, that claim gets checked.
+
+   Exposes window.RS.validate
+   ========================================================================== */
+(function (global) {
+  'use strict';
+
+  const RS = global.RS;
+  const U = RS.util;
+
+  const PASS = 'pass', WARN = 'warn', FAIL = 'fail', SKIP = 'skip';
+
+  /** Tolerance for a single printed line: rounding noise plus OCR jitter. */
+  const lineTol = (amount) => Math.max(0.02, Math.abs(amount || 0) * 0.005);
+  /** Tolerance for a sum of many lines. */
+  const sumTol = (expected) => Math.max(0.5, Math.abs(expected || 0) * 0.002);
+
+  function status(delta, tol) {
+    const d = Math.abs(delta);
+    if (d <= tol) return PASS;
+    if (d <= tol * 3) return WARN;
+    return FAIL;
+  }
+
+  function check(o) {
+    return {
+      stage: 'math',
+      status: o.status,
+      id: o.id,
+      label: o.label,
+      equation: o.equation,
+      printed: o.printed,
+      computed: o.computed,
+      delta: o.delta,
+      tol: o.tol,
+      severity: o.severity || 'medium',
+      detail: o.detail || '',
+    };
+  }
+
+  /**
+   * @param {object} r structured receipt from RS.parse
+   * @returns {{checks:Array, summary:object, reconciles:boolean}}
+   */
+  function validate(r) {
+    const checks = [];
+    const sym = r.currency.symbol;
+    const m = (v) => U.fmtMoney(v, sym);
+    const T = r.totals;
+    const items = r.items.filter((i) => Number.isFinite(i.amount));
+
+    /* ── 1. is there anything to check? ─────────────────────── */
+    if (!items.length) {
+      checks.push(check({
+        id: 'items-present', label: 'Line items detected', status: FAIL, severity: 'medium',
+        equation: 'at least one line item', printed: 0, computed: items.length,
+        delta: NaN, tol: 0,
+        detail: 'No line item with a price could be read, so the arithmetic behind this receipt cannot be verified.',
+      }));
+    } else {
+      checks.push(check({
+        id: 'items-present', label: 'Line items detected', status: PASS, severity: 'info',
+        equation: 'count of priced line items', printed: items.length, computed: items.length,
+        delta: 0, tol: 0, detail: items.length + ' priced line item(s) parsed.',
+      }));
+    }
+
+    if (!Number.isFinite(T.total)) {
+      checks.push(check({
+        id: 'total-present', label: 'Grand total present', status: FAIL, severity: 'high',
+        equation: 'a printed grand total', printed: NaN, computed: T.total,
+        delta: NaN, tol: 0,
+        detail: 'No grand total could be found. Without it there is nothing to reconcile against, which is itself unusual for a real receipt.',
+      }));
+    } else {
+      checks.push(check({
+        id: 'total-present', label: 'Grand total present', status: PASS, severity: 'info',
+        equation: 'printed grand total', printed: T.total, computed: T.total,
+        delta: 0, tol: 0, detail: 'Grand total read as ' + m(T.total) + '.',
+      }));
+    }
+
+    /* ── 2. each line: qty × unit = line total ─────────────── */
+    const lineFails = [];
+    items.forEach((it, i) => {
+      if (!it.qtyStated || !Number.isFinite(it.unit) || it.unitDerived) return;
+      const expected = U.round2(it.qty * it.unit);
+      const delta = U.round2(it.amount - expected);
+      const tol = lineTol(expected);
+      const st = status(delta, tol);
+      if (st === PASS) return;
+      const row = check({
+        id: 'line-' + i, label: 'Line ' + (i + 1) + ': ' + it.name, status: st, severity: st === FAIL ? 'high' : 'medium',
+        equation: it.qty + ' × ' + m(it.unit) + ' = ' + m(expected),
+        printed: it.amount, computed: expected, delta, tol,
+        detail: 'Printed line total ' + m(it.amount) + ' does not match ' + it.qty + ' × ' + m(it.unit) + ' (' + m(expected) + ').',
+      });
+      lineFails.push(row);
+      checks.push(row);
+    });
+    checks.push(check({
+      id: 'line-qty-unit', label: 'Quantity × unit price on every line',
+      status: lineFails.some((c) => c.status === FAIL) ? FAIL : (lineFails.length ? WARN : PASS),
+      severity: 'medium',
+      equation: 'qty × unit = line total, all lines',
+      printed: lineFails.length, computed: 0, delta: lineFails.length, tol: 0,
+      detail: lineFails.length
+        ? lineFails.length + ' line(s) fail their own multiplication.'
+        : 'Every stated quantity times its unit price equals the printed line total.',
+    }));
+
+    /* ── 3. items ⇒ subtotal ───────────────────────────────── */
+    const itemsSum = r.itemsSum;
+    if (Number.isFinite(T.subtotal)) {
+      const expected = itemsSum;
+      const delta = U.round2(T.subtotal - expected);
+      const tol = sumTol(expected);
+      const st = status(delta, tol);
+      checks.push(check({
+        id: 'items-sum-subtotal', label: 'Line items add up to the subtotal',
+        status: st, severity: st === FAIL ? 'critical' : 'medium',
+        equation: 'Σ line totals = subtotal → ' + m(itemsSum),
+        printed: T.subtotal, computed: itemsSum, delta, tol,
+        detail: st === PASS
+          ? 'The item lines sum exactly to the printed subtotal ' + m(T.subtotal) + '.'
+          : 'The item lines sum to ' + m(itemsSum) + ' but the receipt prints a subtotal of ' + m(T.subtotal) +
+            ' — a difference of ' + U.fmtMoney(Math.abs(delta), sym) + '.',
+      }));
+    } else {
+      checks.push(check({
+        id: 'items-sum-subtotal', label: 'Line items add up to the subtotal',
+        status: SKIP, severity: 'info', equation: 'Σ line totals = subtotal',
+        printed: NaN, computed: itemsSum, delta: NaN, tol: 0,
+        detail: 'No subtotal line printed; the sum of the items (' + m(itemsSum) + ') is carried forward instead.',
+      }));
+    }
+
+    /* ── 4. subtotal − discount = taxable value ────────────── */
+    const discount = Number.isFinite(T.discount) ? T.discount : 0;
+    const netBeforeTax = Number.isFinite(T.taxable)
+      ? T.taxable
+      : U.round2((Number.isFinite(T.subtotal) ? T.subtotal : itemsSum) - discount);
+
+    if (Number.isFinite(T.taxable) && Number.isFinite(T.subtotal)) {
+      const expected = U.round2(T.subtotal - discount);
+      const delta = U.round2(T.taxable - expected);
+      const tol = sumTol(expected);
+      const st = status(delta, tol);
+      checks.push(check({
+        id: 'subtotal-less-discount', label: 'Subtotal − discount = taxable value', status: st,
+        severity: st === FAIL ? 'high' : 'medium',
+        equation: m(T.subtotal) + ' − ' + m(discount) + ' = ' + m(expected),
+        printed: T.taxable, computed: expected, delta, tol,
+        detail: st === PASS
+          ? 'The taxable value ' + m(T.taxable) + ' matches subtotal minus discount.'
+          : 'Taxable value should be ' + m(expected) + ' but the receipt prints ' + m(T.taxable) + '.',
+      }));
+    }
+
+    /* ── 5. net + tax + round-off = grand total ────────────── */
+    if (Number.isFinite(T.total)) {
+      const tax = Number.isFinite(T.tax) ? T.tax : 0;
+      const roundOff = Number.isFinite(T.roundOff) ? T.roundOff : 0;
+      const expected = U.round2(netBeforeTax + tax + roundOff);
+      const delta = U.round2(T.total - expected);
+      const tol = sumTol(expected);
+      const st = status(delta, tol);
+      checks.push(check({
+        id: 'net-tax-total', label: 'Net + tax + rounding = grand total',
+        status: st, severity: st === FAIL ? 'critical' : 'medium',
+        equation: m(netBeforeTax) + ' + ' + m(tax) + (roundOff ? ' + ' + m(roundOff) : '') + ' = ' + m(expected),
+        printed: T.total, computed: expected, delta, tol,
+        detail: st === PASS
+          ? 'The grand total reconciles: ' + m(expected) + ' as printed.'
+          : 'Recomputing from the receipt’s own figures gives ' + m(expected) + ', but the printed grand total is ' +
+            m(T.total) + ' — off by ' + U.fmtMoney(Math.abs(delta), sym) + '.',
+      }));
+
+      // materiality: is the gap a big fraction of the bill?
+      if (st !== PASS && expected > 0) {
+        const pct = (Math.abs(delta) / expected) * 100;
+        if (pct >= 5) {
+          checks[checks.length - 1].detail +=
+            ' The gap is ' + pct.toFixed(1) + '% of the bill, far beyond rounding noise.';
+        }
+      }
+    }
+
+    /* ── 6. does each tax line follow its own rate? ────────── */
+    if (r.taxes.length) {
+      r.taxes.forEach((t, i) => {
+        if (!Number.isFinite(t.rate)) return;
+        const base = netBeforeTax;
+        if (!Number.isFinite(base) || base <= 0) return;
+        const expected = U.round2((base * t.rate) / 100);
+        const delta = U.round2(t.amount - expected);
+        const tol = Math.max(0.05, Math.abs(expected) * 0.02);
+        const rateOk = t.rate > 0 && t.rate <= 30;
+        const st = !rateOk ? FAIL : status(delta, tol);
+        checks.push(check({
+          id: 'tax-rate-' + i, label: 'Tax line ' + (i + 1) + ': ' + t.label.replace(/\s+/g, ' '),
+          status: st, severity: !rateOk ? 'high' : (st === FAIL ? 'medium' : 'info'),
+          equation: m(base) + ' × ' + t.rate + '% = ' + m(expected),
+          printed: t.amount, computed: expected, delta, tol,
+          detail: !rateOk
+            ? 'A tax rate of ' + t.rate + '% is outside any plausible band for a retail receipt.'
+            : (st === PASS
+              ? 'The ' + t.rate + '% rate applied to ' + m(base) + ' gives ' + m(t.amount) + ' as printed.'
+              : 'A ' + t.rate + '% rate on ' + m(base) + ' should give ' + m(expected) + ', not ' + m(t.amount) + '.'),
+        }));
+      });
+    }
+
+    /* ── 7. rounding line behaves like a rounding line ─────── */
+    if (Number.isFinite(T.roundOff)) {
+      const okMagnitude = Math.abs(T.roundOff) <= 0.5;
+      checks.push(check({
+        id: 'roundoff', label: 'Rounding adjustment is within ±0.50',
+        status: okMagnitude ? PASS : FAIL, severity: okMagnitude ? 'info' : 'medium',
+        equation: '|round off| ≤ 0.50', printed: T.roundOff, computed: okMagnitude ? 0 : T.roundOff,
+        delta: okMagnitude ? 0 : T.roundOff, tol: 0.5,
+        detail: okMagnitude
+          ? 'The rounding line is ' + m(T.roundOff) + ', a normal amount.'
+          : 'A rounding adjustment of ' + m(T.roundOff) + ' is too large to be rounding — it is being used to hide a difference.',
+      }));
+    }
+
+    /* ── 8. payment lines ──────────────────────────────────── */
+    if (Number.isFinite(T.tendered) && Number.isFinite(T.total)) {
+      const short = U.round2(T.total - T.tendered);
+      const st = short > lineTol(T.total) ? FAIL : PASS;
+      checks.push(check({
+        id: 'tendered', label: 'Amount paid covers the total',
+        status: st, severity: st === FAIL ? 'high' : 'info',
+        equation: m(T.tendered) + ' ≥ ' + m(T.total),
+        printed: T.tendered, computed: T.total, delta: short, tol: lineTol(T.total),
+        detail: st === PASS
+          ? 'The payment line covers the total.'
+          : 'The amount shown as paid (' + m(T.tendered) + ') is ' + m(short) + ' short of the printed total.',
+      }));
+    }
+    if (Number.isFinite(T.change) && Number.isFinite(T.tendered) && Number.isFinite(T.total)) {
+      const expected = U.round2(T.tendered - T.total);
+      const delta = U.round2(T.change - expected);
+      const st = status(delta, lineTol(expected));
+      checks.push(check({
+        id: 'change', label: 'Change = paid − total', status: st,
+        severity: st === FAIL ? 'medium' : 'info',
+        equation: m(T.tendered) + ' − ' + m(T.total) + ' = ' + m(expected),
+        printed: T.change, computed: expected, delta, tol: lineTol(expected),
+        detail: st === PASS ? 'Change matches.' : 'Change should be ' + m(expected) + ' but the receipt prints ' + m(T.change) + '.',
+      }));
+    }
+
+    /* ── 9. sign sanity ────────────────────────────────────── */
+    const negativeItems = items.filter((i) => i.amount < 0);
+    if (negativeItems.length) {
+      checks.push(check({
+        id: 'signs', label: 'Line amounts are positive', status: FAIL, severity: 'medium',
+        equation: 'all line totals > 0', printed: negativeItems.length, computed: 0,
+        delta: negativeItems.length, tol: 0,
+        detail: negativeItems.length + ' line item(s) carry a non-positive amount without being labelled as a discount or return.',
+      }));
+    }
+
+    const summary = { pass: 0, warn: 0, fail: 0, skip: 0 };
+    checks.forEach((c) => { summary[c.status] = (summary[c.status] || 0) + 1; });
+
+    return {
+      checks,
+      summary,
+      reconciles: summary.fail === 0,
+      netBeforeTax,
+      itemsSum,
+      computedTotal: Number.isFinite(T.total)
+        ? U.round2(netBeforeTax + (Number.isFinite(T.tax) ? T.tax : 0) + (Number.isFinite(T.roundOff) ? T.roundOff : 0))
+        : null,
+    };
+  }
+
+  RS.validate = { validate, PASS, WARN, FAIL, SKIP };
+})(window);
+</script>
+<script>
+/* ==========================================================================
+   ReceiptShield — visual.js
+   Stage 5: visual tampering analysis.
+
+   Four independent looks at the pixels and the typography:
+
+     1. Error-level analysis (ELA) — re-compress the image and measure how much
+        each pixel moves. A region pasted in after the original was saved has a
+        different compression history and lights up next to the rest of the file.
+     2. Paper-tone mapping — find flat background pixels and look for patches
+        whose tone does not match the rest of the sheet. A paste almost always
+        carries a slightly different white.
+     3. Typography forensics — glyph height, character width and right-edge
+        alignment of every amount-like word. A figure typed in a different face,
+        at a different size, or nudged off the value column breaks the pattern.
+     4. Suspicious-file check — image-editor metadata and APP segments left in
+        the container.
+
+   Exposes window.RS.visual
+   ========================================================================== */
+(function (global) {
+  'use strict';
+
+  const RS = global.RS;
+  const U = RS.util;
+
+  /* ── shared helpers ──────────────────────────────────────── */
+  function blank(w, h) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    return c;
+  }
+  const px = (ctx, w, h) => ctx.getImageData(0, 0, w, h);
+
+  /* ── 1. error-level analysis ─────────────────────────────── */
+  async function errorLevel(canvas, quality) {
+    const w = canvas.width, h = canvas.height;
+    const src = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h);
+    const a = src.data;
+
+    const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', quality || 0.70));
+    const bmp = await createImageBitmap(blob);
+    const tmp = blank(w, h);
+    const tctx = tmp.getContext('2d', { willReadFrequently: true });
+    tctx.drawImage(bmp, 0, 0);
+    bmp.close();
+    const b = tctx.getImageData(0, 0, w, h).data;
+
+    const ela = new Float32Array(w * h);
+    for (let i = 0, p = 0; i < a.length; i += 4, p++) {
+      const d0 = Math.abs(a[i] - b[i]);
+      const d1 = Math.abs(a[i + 1] - b[i + 1]);
+      const d2 = Math.abs(a[i + 2] - b[i + 2]);
+      ela[p] = Math.max(d0, Math.max(d1, d2));
+    }
+
+    // Snap the grid to the 8×8 JPEG block lattice: cells that straddle block
+    // boundaries inherit spurious residue and would read as false hot spots.
+    const cell = Math.max(24, Math.round(Math.round(Math.min(w, h) / 26) / 8) * 8);
+    const cols = Math.max(1, Math.ceil(w / cell));
+    const rows = Math.max(1, Math.ceil(h / cell));
+    const cells = [];
+    for (let cy = 0; cy < rows; cy++) {
+      for (let cx = 0; cx < cols; cx++) {
+        const x0 = cx * cell, y0 = cy * cell;
+        const x1 = Math.min(w, x0 + cell), y1 = Math.min(h, y0 + cell);
+        let sum = 0, n = 0, mx = 0, dark = 0;
+        for (let y = y0; y < y1; y++) {
+          const base = y * w;
+          for (let x = x0; x < x1; x++) {
+            const v = ela[base + x];
+            sum += v; n++;
+            if (v > mx) mx = v;
+            const i = (base + x) * 4;
+            if (0.299 * a[i] + 0.587 * a[i + 1] + 0.114 * a[i + 2] < 150) dark++;
+          }
+        }
+        cells.push({
+          cx, cy, x: x0, y: y0, w: x1 - x0, h: y1 - y0,
+          mean: n ? sum / n : 0, max: mx,
+          ink: n ? dark / n : 0,        // how much of the cell is actually ink
+        });
+      }
+    }
+
+    const means = cells.map((c) => c.mean);
+    const med = U.median(means);
+    const spread = U.mad(means);
+    const p99 = U.percentile(Array.from(ela), 99);
+
+    // Error level rises with how much ink is in a cell, so a cell must only ever
+    // be compared with cells carrying a similar amount of ink. Without this,
+    // ordinary text looks anomalous next to blank paper and every receipt reads
+    // as tampered — the single most common way ELA produces nonsense.
+    const INK_GROUPS = [
+      { id: 'blank paper', test: (c) => c.ink <= 0.005 },
+      { id: 'light text', test: (c) => c.ink > 0.005 && c.ink <= 0.06 },
+      { id: 'moderate text', test: (c) => c.ink > 0.06 && c.ink <= 0.18 },
+      { id: 'dense text', test: (c) => c.ink > 0.18 },
+    ];
+
+    const hotspots = [];
+    const groupStats = [];
+    INK_GROUPS.forEach((grp) => {
+      const g = cells.filter(grp.test);
+      if (g.length < 8) return;
+      const vals = g.map((c) => c.mean);
+      const gMed = U.median(vals);
+      const gSpread = Math.max(U.mad(vals), 0.35);
+      let flagged = 0;
+      g.forEach((c) => {
+        const z = U.robustZ(c.mean, gMed, gSpread);
+        if (z > 3.5 && c.mean - gMed > 0.6 && c.mean > 0.8) {
+          c.z = z;
+          c.group = grp.id;
+          c.groupMedian = gMed;
+          hotspots.push(c);
+          flagged++;
+        }
+      });
+      groupStats.push({ id: grp.id, cells: g.length, median: gMed, mad: gSpread, flagged });
+    });
+
+    const hot = hotspots;
+
+    return {
+      ela, w, h, cells, hot, groups: groupStats,
+      stats: { median: med, mad: spread, p99, max: U.percentile(Array.from(ela), 100), mean: U.mean(Array.from(ela)) },
+      norm: normalize(ela, p99 || 255),
+    };
+  }
+
+  function normalize(ela, ceil) {
+    const out = new Uint8ClampedArray(ela.length);
+    const c = Math.max(1, ceil);
+    for (let i = 0; i < ela.length; i++) out[i] = U.clamp((ela[i] / c) * 255, 0, 255);
+    return out;
+  }
+
+  /** Group grid cells into connected blobs and return bounding boxes. */
+  function groupCells(cells, w, h, minCells) {
+    const map = new Map();
+    cells.forEach((c) => map.set(c.cx + ',' + c.cy, c));
+    const seen = new Set();
+    const blobs = [];
+
+    cells.forEach((start) => {
+      const key = start.cx + ',' + start.cy;
+      if (seen.has(key)) return;
+      const stack = [start];
+      seen.add(key);
+      const members = [];
+      while (stack.length) {
+        const c = stack.pop();
+        members.push(c);
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (!dx && !dy) continue;
+            const k = (c.cx + dx) + ',' + (c.cy + dy);
+            if (seen.has(k) || !map.has(k)) continue;
+            seen.add(k);
+            stack.push(map.get(k));
+          }
+        }
+      }
+      if (members.length < (minCells || 2)) return;
+      const x0 = Math.min(...members.map((c) => c.x));
+      const y0 = Math.min(...members.map((c) => c.y));
+      const x1 = Math.max(...members.map((c) => c.x + c.w));
+      const y1 = Math.max(...members.map((c) => c.y + c.h));
+      blobs.push({
+        x: x0, y: y0, w: x1 - x0, h: y1 - y0,
+        cells: members.length,
+        members,
+        strength: U.mean(members.map((c) => c.z === undefined ? 0 : c.z)),
+      });
+    });
+    return blobs.sort((a, b) => (b.w * b.h) - (a.w * a.h));
+  }
+
+  /* ── 2. paper-tone mapping ───────────────────────────────── */
+  function paperTone(canvas) {
+    const w = canvas.width, h = canvas.height;
+    const d = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h).data;
+    const cell = 14;
+    const cols = Math.ceil(w / cell), rows = Math.ceil(h / cell);
+    const grid = [];
+
+    for (let cy = 0; cy < rows; cy++) {
+      for (let cx = 0; cx < cols; cx++) {
+        const x0 = cx * cell, y0 = cy * cell;
+        const x1 = Math.min(w, x0 + cell), y1 = Math.min(h, y0 + cell);
+        let sum = 0, sum2 = 0, n = 0;
+        for (let y = y0; y < y1; y++) {
+          for (let x = x0; x < x1; x++) {
+            const i = (y * w + x) * 4;
+            const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            sum += lum; sum2 += lum * lum; n++;
+          }
+        }
+        if (!n) continue;
+        const mean = sum / n;
+        const sd = Math.sqrt(Math.max(0, sum2 / n - mean * mean));
+        grid.push({ cx, cy, x: x0, y: y0, w: x1 - x0, h: y1 - y0, mean, sd });
+      }
+    }
+
+    // only pixels that look like blank paper can define the paper tone
+    const flat = grid.filter((c) => c.sd < 9 && c.mean > 140);
+    const tone = U.median(flat.map((c) => c.mean));
+    const spread = U.mad(flat.map((c) => c.mean));
+
+    const off = flat.filter((c) => Math.abs(c.mean - tone) >= Math.max(4, spread * 4));
+    const blobs = groupCells(off.map((c) => ({ ...c })), w, h, 4);
+
+    return {
+      tone,
+      spread,
+      flatCells: flat.length,
+      offCells: off.length,
+      regions: blobs.map((b) => ({
+        ...b,
+        delta: (() => {
+          const inside = flat.filter((c) => c.x >= b.x && c.x < b.x + b.w && c.y >= b.y && c.y < b.y + b.h);
+          return inside.length ? U.mean(inside.map((c) => c.mean)) - tone : 0;
+        })(),
+      })),
+    };
+  }
+
+  /* ── 3. typography forensics ─────────────────────────────── */
+  function typography(ocr, receipt) {
+    // Only amounts the parser actually treated as money take part. Text that is
+    // amount-shaped but not money — a postal code, a registration number — would
+    // otherwise be compared against a currency column it never belonged to.
+    const metrics = [];
+    const seen = new Set();
+    const add = (w) => {
+      if (!w || !w.text) return;
+      const key = Math.round(w.x0) + ':' + Math.round(w.y0) + ':' + w.text;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const h = w.y1 - w.y0;
+      const cw = (w.x1 - w.x0) / Math.max(1, w.text.length);
+      if (h < 5 || cw <= 0) return;
+      metrics.push({ text: w.text, conf: w.conf, x0: w.x0, x1: w.x1, y0: w.y0, y1: w.y1, h, cw, right: w.x1 });
+    };
+
+    receipt.items.forEach((i) => {
+      if (!i.geo) return;
+      if (i.unitStated) add(i.geo.unitWord);
+      add(i.geo.amountWord);
+    });
+    ['subtotal', 'taxable', 'total', 'roundOff', 'tendered', 'change'].forEach((k) => {
+      const f = receipt.fields[k];
+      if (f && f.geo) add(f.geo.amountWord);
+    });
+    receipt.taxes.forEach((t) => add(t.geo && t.geo.amountWord));
+    receipt.adjustments.forEach((a) => add(a.geo && a.geo.amountWord));
+
+    if (metrics.length < 4) {
+      return { enough: false, amountWords: metrics.length, outliers: [], columns: [], regions: [] };
+    }
+
+    // A receipt has several money columns (unit price, line total, grand total).
+    // They must be compared against themselves, not against each other, so first
+    // group the amounts by right edge. Single linkage with a tolerance a little
+    // wider than typical OCR jitter keeps one column together while a figure
+    // nudged off it still lands inside its own column and can be measured.
+    const tol = Math.max(8, canvasIndependentTol(metrics));
+    const columns = clusterByRight(metrics, tol).filter((c) => c.items.length >= 3);
+
+    const outliers = [];
+    const summary = [];
+    columns.forEach((col) => {
+      const ms = col.items;
+      const medH = U.median(ms.map((m) => m.h));
+      const madH = U.mad(ms.map((m) => m.h));
+      const medW = U.median(ms.map((m) => m.cw));
+      const madW = U.mad(ms.map((m) => m.cw));
+      const medR = U.median(ms.map((m) => m.right));
+      const madR = U.mad(ms.map((m) => m.right));
+      summary.push({ right: medR, size: ms.length, height: medH, charWidth: medW, madRight: madR });
+
+      ms.forEach((m) => {
+        const zH = U.robustZ(m.h, medH, madH);
+        const zW = U.robustZ(m.cw, medW, madW);
+        const ratioH = m.h / medH;
+        const ratioW = m.cw / medW;
+        const align = m.right - medR;
+
+        const sizeBad = Math.abs(zH) > 3.5 && (ratioH > 1.16 || ratioH < 0.86);
+        const widthBad = Math.abs(zW) > 3.5 && (ratioW > 1.12 || ratioW < 0.89);
+        const alignBad = Math.abs(align) > Math.max(3, madR * 4);
+
+        // Glyph height is the reliable measurement; OCR word boxes wobble by a few
+        // pixels horizontally, so a lone width or a lone small alignment deviation
+        // is not enough to accuse an amount of being retyped. Two weak signals, or
+        // one strong one, is the bar.
+        const flagged =
+          sizeBad ||
+          (widthBad && alignBad) ||
+          (alignBad && Math.abs(align) > 10) ||
+          (widthBad && ratioW > 1.4);
+        if (!flagged) return;
+
+        outliers.push({
+          text: m.text,
+          x: m.x0, y: m.y0, w: m.x1 - m.x0, h: m.h,
+          column: Math.round(medR),
+          reasons: [
+            sizeBad ? 'glyph height ' + (ratioH * 100).toFixed(0) + '% of its column’s median' : null,
+            widthBad ? 'character width ' + (ratioW * 100).toFixed(0) + '% of its column’s median' : null,
+            alignBad ? 'right edge ' + (align > 0 ? '+' : '') + align.toFixed(1) + 'px off the column' : null,
+          ].filter(Boolean),
+          zH, zW, align,
+          weight: (sizeBad ? 0.42 : 0) + (widthBad ? 0.44 : 0) + (alignBad ? 0.3 : 0),
+        });
+      });
+    });
+
+    return {
+      enough: true,
+      amountWords: metrics.length,
+      columns: summary,
+      median: summary[0] || { height: U.median(metrics.map((m) => m.h)), charWidth: U.median(metrics.map((m) => m.cw)) },
+      outliers,
+      regions: outliers.map((o) => ({
+        x: Math.max(0, o.x - 6), y: Math.max(0, o.y - 6), w: o.w + 12, h: o.h + 12,
+        cells: 1, score: U.clamp(o.weight, 0, 1), label: 'typography',
+        why: o.text + ' — ' + o.reasons.join('; '),
+      })),
+    };
+  }
+
+  /** Group amounts by right edge with single-linkage clustering. */
+  function clusterByRight(metrics, tol) {
+    const sorted = metrics.slice().sort((a, b) => a.right - b.right);
+    const clusters = [];
+    sorted.forEach((m) => {
+      const last = clusters[clusters.length - 1];
+      if (last && m.right - last.max <= tol) {
+        last.items.push(m);
+        last.max = Math.max(last.max, m.right);
+      } else {
+        clusters.push({ items: [m], max: m.right });
+      }
+    });
+    return clusters;
+  }
+
+  /**
+   * Column tolerance, derived from the amount metrics themselves rather than
+   * from the image size, so it works for a phone snap and a flatbed scan alike.
+   */
+  function canvasIndependentTol(metrics) {
+    const chars = metrics.map((m) => m.cw).filter(Number.isFinite).sort((a, b) => a - b);
+    const med = chars.length ? chars[chars.length >> 1] : 10;
+    return med * 0.9;
+  }
+
+  /* ── 4. suspicious-file check ────────────────────────────── */
+  const EDITOR_TAGS = [
+    'Adobe Photoshop', 'Adobe Lightroom', 'Adobe Illustrator', 'Photoshop',
+    'GIMP', 'Canva', 'Pixlr', 'Photopea', 'Snapseed', 'Picsart', 'Fotor',
+    'Paint.NET', 'IrfanView', 'XnView', 'Affinity Photo', 'Capture One',
+    'AcdSee', 'CorelDRAW', 'Sketch', 'Meitu', 'Aviary', 'inPixio', 'Movavi',
+  ];
+
+  async function fileCheck(blob) {
+    const out = { available: !!blob, isJpeg: false, editorTags: [], software: null, appSegments: 0, size: 0 };
+    if (!blob || typeof blob.slice !== 'function') return out;
+    out.size = blob.size;
+    const head = await blob.slice(0, 384 * 1024).arrayBuffer();
+    const bytes = new Uint8Array(head);
+
+    if (bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8) out.isJpeg = true;
+
+    // count JPEG APP segments
+    if (out.isJpeg) {
+      let i = 2;
+      while (i + 4 < bytes.length && bytes[i] === 0xff) {
+        const marker = bytes[i + 1];
+        if (marker === 0xda || marker === 0xd9) break;
+        const len = (bytes[i + 2] << 8) | bytes[i + 3];
+        if (marker >= 0xe0 && marker <= 0xef) out.appSegments++;
+        if (len < 2) break;
+        i += 2 + len;
+      }
+    }
+
+    const ascii = new TextDecoder('latin1').decode(bytes);
+    EDITOR_TAGS.forEach((tag) => {
+      if (ascii.indexOf(tag) !== -1 && out.editorTags.indexOf(tag) === -1) out.editorTags.push(tag);
+    });
+    const sw = ascii.match(/<xmp:CreatorTool>([^<]{1,80})<\/xmp:CreatorTool>/i)
+      || ascii.match(/xmp:CreatorTool="([^"]{1,80})"/i)
+      || ascii.match(/Software["']?\s*[:=]\s*["']?([^"'\r\n]{1,60})/i);
+    if (sw) out.software = sw[1].trim();
+    return out;
+  }
+
+  /* ── combine ─────────────────────────────────────────────── */
+  function mergeRegions(candidates) {
+    const merged = [];
+    candidates.filter(Boolean).forEach((c) => {
+      const found = merged.find((m) => U.overlapRatio(m, c) > 0.28 || contains(m, c));
+      if (found) {
+        found.signals.push(c);
+        found.x = Math.min(found.x, c.x);
+        found.y = Math.min(found.y, c.y);
+        found.x1 = Math.max(found.x1, c.x + c.w);
+        found.y1 = Math.max(found.y1, c.y + c.h);
+        found.w = found.x1 - found.x;
+        found.h = found.y1 - found.y;
+      } else {
+        merged.push({ x: c.x, y: c.y, x1: c.x + c.w, y1: c.y + c.h, w: c.w, h: c.h, signals: [c] });
+      }
+    });
+    merged.forEach((m) => {
+      const kinds = {};
+      m.signals.forEach((s) => { kinds[s.label] = (kinds[s.label] || 0) + 1; });
+      m.kinds = Object.keys(kinds);
+      m.score = U.clamp(m.signals.reduce((s, x) => s + (x.score || 0.3), 0), 0, 1);
+      m.why = Array.from(new Set(m.signals.map((s) => s.why).filter(Boolean))).slice(0, 4);
+    });
+    return merged.sort((a, b) => b.score - a.score || (b.w * b.h) - (a.w * a.h));
+  }
+  const contains = (a, b) =>
+    a.x <= b.x && a.y <= b.y && (a.x1 !== undefined ? a.x1 : a.x + a.w) >= b.x + b.w && a.y1 >= b.y + b.h;
+
+  /* ── main ────────────────────────────────────────────────── */
+  /**
+   * @param {HTMLCanvasElement} canvas  the receipt at natural resolution
+   * @param {object} receipt            RS.parse output
+   * @param {object} ocr                RS.ocr output
+   * @param {Blob}   blob               the original file, for the container check
+   */
+  async function analyze(canvas, receipt, ocr, blob) {
+    const findings = [];
+    const checks = [];
+    const note = [];
+
+    const ela = await errorLevel(canvas, 0.70);
+    const tone = paperTone(canvas);
+    const typo = typography(ocr, receipt);
+    const file = await fileCheck(blob);
+
+    /* 1 — error level */
+    const elaBlobs = groupCells(ela.hot, canvas.width, canvas.height, 4).map((b) => {
+      const members = b.members || [];
+      const groups = Array.from(new Set(members.map((m) => m.group)));
+      const zs = members.map((m) => m.z).filter(Number.isFinite);
+      const meanZ = zs.length ? U.mean(zs) : 0;
+      const strongest = members.reduce((a, b2) => (b2.z > a.z ? b2 : a), members[0] || { z: 0 });
+      return {
+        x: b.x, y: b.y, w: b.w, h: b.h, cells: members.length, label: 're-compression',
+        strong: members.length >= 6 || meanZ >= 5,
+        score: U.clamp(0.45 + members.length / 50 + Math.min(meanZ, 12) / 40, 0, 1),
+        why: members.length + ' adjacent cells of ' + (groups.join(' / ') || 'similar') +
+          ' carry more re-compression residue than that content normally does here (error level ' +
+          (strongest.mean || 0).toFixed(1) + ' against ' + (strongest.groupMedian || 0).toFixed(1) + ' typical)',
+      };
+    });
+    const elaAll = elaBlobs;
+    const strongEla = elaAll.filter((b) => b.strong);
+
+    const groupLine = (ela.groups || [])
+      .map((g) => g.id + ' ' + g.cells + ' cells, ' + g.flagged + ' flagged')
+      .join(' · ');
+    checks.push({
+      stage: 'visual',
+      status: strongEla.length ? 'fail' : (elaAll.length ? 'warn' : 'pass'),
+      label: 'Error-level analysis', id: 'ela',
+      detail: (elaAll.length
+        ? strongEla.length + ' of ' + elaAll.length + ' region(s) show re-compression residue well above what the same kind of content shows elsewhere in this file.'
+        : 'Re-compression residue is consistent with the content of each region; nothing stands out.') +
+        (groupLine ? ' Comparisons were made within ink-coverage bands: ' + groupLine + '.' : ''),
+    });
+    note.push('Error level compares each region only against other regions carrying a similar amount of ink, so ordinary text is never mistaken for tampering.');
+
+    /* 2 — paper tone */
+    const toneRegions = tone.regions.map((r) => ({
+      x: r.x, y: r.y, w: r.w, h: r.h, cells: r.cells, label: 'tone mismatch',
+      score: U.clamp(0.35 + Math.abs(r.delta) / 30, 0, 1),
+      why: 'blank paper here reads ' + (r.delta > 0 ? '+' : '') + r.delta.toFixed(1) +
+        ' luminance away from the sheet average (' + tone.tone.toFixed(0) + ') across ' + r.cells + ' patches',
+    }));
+
+    checks.push({
+      stage: 'visual', status: toneRegions.length ? 'fail' : 'pass',
+      label: 'Paper-tone consistency', id: 'tone',
+      detail: toneRegions.length
+        ? toneRegions.length + ' patch(es) of blank paper do not match the sheet’s baseline tone of ' +
+          tone.tone.toFixed(0) + ' — consistent with content pasted from a different image.'
+        : 'Every blank area of the sheet shares one paper tone (' + tone.tone.toFixed(0) + ' ± ' + tone.spread.toFixed(2) + ').',
+    });
+
+    /* 3 — typography */
+    const typoRegions = typo.enough ? typo.regions.map((r) => ({ ...r, points: r.score })) : [];
+    checks.push({
+      stage: 'visual',
+      status: !typo.enough ? 'skip' : (typo.outliers.length ? 'fail' : 'pass'),
+      label: 'Amount typography consistency', id: 'typo',
+      detail: !typo.enough
+        ? 'Not enough amount-like words were recognised to compare glyph metrics.'
+        : typo.outliers.length
+          ? typo.outliers.length + ' amount(s) break the value column’s type pattern: ' +
+            typo.outliers.map((o) => o.text + ' (' + o.reasons.join(', ') + ')').join(' · ')
+          : 'All ' + typo.amountWords + ' amounts share the column’s glyph height, character width and right edge.',
+    });
+
+    /* 4 — container */
+    const editorHit = file.editorTags.length > 0 || !!file.software;
+    checks.push({
+      stage: 'visual',
+      status: editorHit ? 'fail' : 'pass',
+      label: 'Suspicious file metadata', id: 'filemeta',
+      detail: editorHit
+        ? 'The file container names an image editor: ' + (file.software || file.editorTags.join(', ')) +
+          (file.isJpeg ? ' (JPEG, ' + file.appSegments + ' APP segment(s))' : '') + '.'
+        : file.available
+          ? 'No image-editor signature found in the file container' + (file.isJpeg ? ' (JPEG, ' + file.appSegments + ' APP segment(s))' : '') + '.'
+          : 'Container analysis not available for this input.',
+    });
+
+    /* 5 — confidence clusters (supporting evidence only) */
+    const lowConf = (ocr.words || []).filter((w) => w.conf < 55 && w.text.trim().length > 1);
+    const docConf = ocr.conf || 0;
+    let confRegions = [];
+    if (lowConf.length && docConf > 70) {
+      const blobs = groupCells(
+        lowConf.map((w) => ({
+          cx: Math.round(w.x0 / 40), cy: Math.round(w.y0 / 18),
+          x: Math.round(w.x0), y: Math.round(w.y0),
+          w: Math.round(w.x1 - w.x0), h: Math.round(w.y1 - w.y0),
+        })),
+        canvas.width, canvas.height, 2
+      );
+      confRegions = blobs.map((b) => ({
+        x: b.x, y: b.y, w: b.w, h: b.h, cells: b.cells, label: 'low confidence',
+        score: 0.22,
+        why: b.cells + ' low-confidence word(s) clustered together while the document averages ' + docConf.toFixed(0) + '% confidence',
+      }));
+    }
+
+    /* merge everything the image stage found */
+    const regions = mergeRegions([...elaAll, ...toneRegions, ...typoRegions, ...confRegions]);
+    regions.forEach((r, i) => {
+      r.index = i + 1;
+      r.kinds = r.kinds || [];
+      if (!r.why.length) r.why = ['region flagged by the image stage'];
+    });
+
+    /* findings */
+    if (toneRegions.length) findings.push({
+      stage: 'visual', id: 'tone-patch', severity: 'high',
+      title: 'Background patch does not match the paper',
+      detail: 'One or more blank areas of the sheet have a different paper tone from the rest of the image. When content is copied from another file, the surrounding background usually comes with it.',
+      evidence: toneRegions.map((r) => 'at (' + r.x + ',' + r.y + ') ' + r.w + '×' + r.h + ': ' + r.why).join('\n'),
+      region: toneRegions[0],
+    });
+    if (elaAll.length) findings.push({
+      stage: 'visual', id: 'ela', severity: strongEla.length ? 'high' : 'low',
+      title: 'Re-compression residue outlines edited regions',
+      detail: 'Error-level analysis highlights where the file’s compression history is inconsistent. Content added after the original was saved has been through fewer compression cycles than the rest of the sheet.',
+      evidence: elaAll.slice(0, 4).map((r) => 'at (' + r.x + ',' + r.y + ') ' + r.w + '×' + r.h + ': ' + r.why).join('\n'),
+      region: elaAll[0],
+    });
+    if (typo.enough && typo.outliers.length) findings.push({
+      stage: 'visual', id: 'typo', severity: 'high',
+      title: 'Amounts break the value column’s type pattern',
+      detail: 'Glyph height, character width and right-edge alignment are compared across every amount on the receipt. Words typed in another face, at another size, or nudged off the column stand out.',
+      evidence: typo.outliers.map((o) => '“' + o.text + '” — ' + o.reasons.join('; ')).join('\n'),
+      region: typoRegions[0],
+    });
+    if (editorHit) findings.push({
+      stage: 'visual', id: 'filemeta', severity: 'medium',
+      title: 'File carries image-editor metadata',
+      detail: 'The container names an image editor and/or an XMP creator tool. That is normal for a legitimately exported or resized receipt, but it also means the pixels have been through an editor at least once.',
+      evidence: (file.software ? 'CreatorTool: ' + file.software + '\n' : '') +
+        (file.editorTags.length ? 'Matched in file bytes: ' + file.editorTags.join(', ') : ''),
+      region: null,
+    });
+    if (confRegions.length) findings.push({
+      stage: 'visual', id: 'lowconf', severity: 'low',
+      title: 'Clustered low-confidence characters',
+      detail: 'A group of characters was read with much lower confidence than the rest of the document. Pasted text that was never part of the original render often scans less cleanly. This is supporting evidence only.',
+      evidence: confRegions.map((r) => 'at (' + r.x + ',' + r.y + ') ' + r.why).join('\n'),
+      region: confRegions[0],
+    });
+
+    // Repoint every finding at the merged region it actually lives in, so the
+    // report can link straight from a written finding to the picture.
+    findings.forEach((f) => {
+      if (!f.region) return;
+      const hit = regions.find((r) => U.overlapRatio(r, f.region) > 0.2 || contains(r, f.region));
+      if (hit) f.region = hit;
+    });
+
+    return {
+      ela, tone, typo, file,
+      checks,
+      findings,
+      regions: regions.slice(0, 14),
+      note: note.join(' '),
+      ok: true,
+    };
+  }
+
+  /* ── rendering ───────────────────────────────────────────── */
+  const HEAT_LUT = (() => {
+    const lut = new Uint8ClampedArray(256 * 3);
+    for (let i = 0; i < 256; i++) {
+      const t = i / 255;
+      lut[i * 3] = Math.round(U.clamp(t < 0.5 ? t * 2 * 90 : 255, 0, 255));
+      lut[i * 3 + 1] = Math.round(U.clamp(t < 0.5 ? t * 2 * 40 : 120 + (t - 0.5) * 2 * 20, 0, 255));
+      lut[i * 3 + 2] = Math.round(U.clamp(40 * (1 - t), 0, 255));
+    }
+    return lut;
+  })();
+
+  function renderHeat(target, norm, w, h, amplify) {
+    target.width = w; target.height = h;
+    const ctx = target.getContext('2d');
+    const img = ctx.createImageData(w, h);
+    const d = img.data;
+    const amp = amplify || 1;
+    for (let i = 0, p = 0; i < norm.length; i++, p += 4) {
+      const v = U.clamp(norm[i] * amp, 0, 255) | 0;
+      const k = v * 3;
+      d[p] = HEAT_LUT[k]; d[p + 1] = HEAT_LUT[k + 1]; d[p + 2] = HEAT_LUT[k + 2]; d[p + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  function drawOverlay(target, opts) {
+    const { image, regions, words, showRegions, showHeat, showText, heat, amplify } = opts;
+    const w = image.width, h = image.height;
+    target.width = w; target.height = h;
+    const ctx = target.getContext('2d');
+    ctx.drawImage(image, 0, 0);
+
+    if (showHeat && heat) {
+      const layer = blank(w, h);
+      renderHeat(layer, heat, w, h, amplify ? 8 : 1);
+      ctx.globalAlpha = 0.45;
+      ctx.globalCompositeOperation = 'screen';
+      ctx.drawImage(layer, 0, 0);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+    }
+
+    if (showText && words && words.length) {
+      ctx.lineWidth = 1;
+      words.forEach((wd) => {
+        const c = wd.conf >= 80 ? 'rgba(61,220,132,.45)' : (wd.conf >= 55 ? 'rgba(245,165,36,.5)' : 'rgba(244,83,106,.6)');
+        ctx.strokeStyle = c;
+        ctx.strokeRect(wd.x0 + 0.5, wd.y0 + 0.5, wd.x1 - wd.x0 - 1, wd.y1 - wd.y0 - 1);
+      });
+    }
+
+    if (showRegions && regions && regions.length) {
+      const scale = Math.max(1.5, w / 700);
+      regions.forEach((r) => {
+        const hot = r.score >= 0.55;
+        ctx.lineWidth = 2 * scale;
+        ctx.strokeStyle = hot ? 'rgba(255,45,85,.95)' : 'rgba(245,165,36,.95)';
+        ctx.strokeRect(r.x, r.y, r.w, r.h);
+        ctx.fillStyle = hot ? 'rgba(255,45,85,.14)' : 'rgba(245,165,36,.12)';
+        ctx.fillRect(r.x, r.y, r.w, r.h);
+        const label = '#' + r.index;
+        ctx.font = 'bold ' + Math.round(11 * scale) + 'px ui-monospace, monospace';
+        const tw = ctx.measureText(label).width + 8 * scale;
+        const th = 15 * scale;
+        const ly = r.y - th - 2 >= 0 ? r.y - th - 2 : r.y + 2;
+        ctx.fillStyle = hot ? 'rgba(255,45,85,.92)' : 'rgba(245,165,36,.92)';
+        ctx.fillRect(r.x, ly, tw, th);
+        ctx.fillStyle = '#0b0f16';
+        ctx.fillText(label, r.x + 4 * scale, ly + th * 0.72);
+      });
+    }
+  }
+
+  RS.visual = { analyze, drawOverlay, renderHeat, errorLevel, paperTone, typography, fileCheck };
+})(window);
+</script>
+<script>
+/* ==========================================================================
+   ReceiptShield — report.js
+   Stages 6 and 7: suspicious information detection, then the fraud risk report.
+
+   Stage 6 looks for anomalies that are neither pure arithmetic nor pure pixels:
+   repeated lines, figures whose discrepancy is an exactly round amount, a
+   missing tax line, absent transaction identifiers, a grand total below one of
+   its own line items.
+
+   Stage 7 weights everything into a 0–100 score, writes a plain-language
+   verdict, and assembles one report object the UI and the JSON export share.
+
+   Exposes window.RS.report
+   ========================================================================== */
+(function (global) {
+  'use strict';
+
+  const RS = global.RS;
+  const U = RS.util;
+
+  const WEIGHT = { critical: 34, high: 22, medium: 12, low: 5, info: 0 };
+  const ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+  const SEV_LABEL = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low', info: 'Passed' };
+  const STAGE_LABEL = {
+    upload: 'Receipt Upload',
+    ocr: 'OCR Extraction',
+    parse: 'Item / Price / Tax Detection',
+    math: 'Mathematical Validation',
+    visual: 'Visual Tampering Analysis',
+    suspicious: 'Suspicious Information Detection',
+    report: 'Fraud Risk Report',
+  };
+
+  const BANDS = [
+    { max: 19, band: 'Low risk', tone: 'ok' },
+    { max: 44, band: 'Elevated risk', tone: 'info' },
+    { max: 69, band: 'Suspicious', tone: 'warn' },
+    { max: 100, band: 'High risk', tone: 'danger' },
+  ];
+
+  /* ── helpers ─────────────────────────────────────────────── */
+  const normName = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const downgrade = (sev) => ({ critical: 'medium', high: 'medium', medium: 'low', low: 'low', info: 'info' }[sev] || 'low');
+
+  /**
+   * When a discrepancy is an exactly round money amount it is not rounding
+   * noise — it is the shape of a hand-typed edit.
+   */
+  function roundUnit(delta) {
+    const a = Math.abs(delta);
+    if (!Number.isFinite(a) || a < 40) return null;
+    for (const unit of [10000, 5000, 1000, 500, 100, 50]) {
+      if (Math.abs(a % unit) < 0.02 || Math.abs((a % unit) - unit) < 0.02) return unit;
+    }
+    return null;
+  }
+
+  /* ── stage 6: suspicious information ─────────────────────── */
+  function detectSuspicious(receipt, math) {
+    const checks = [];
+    const findings = [];
+    const items = receipt.items || [];
+    const sym = receipt.currency.symbol;
+    const m = (v) => U.fmtMoney(v, sym);
+
+    /* repeated descriptions */
+    const groups = new Map();
+    items.forEach((i) => {
+      const k = normName(i.name);
+      if (k.length < 4) return;
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(i);
+    });
+    const dupExact = [], dupPrice = [];
+    groups.forEach((g) => {
+      if (g.length < 2) return;
+      const amounts = new Set(g.map((i) => i.amount.toFixed(2)));
+      if (amounts.size === 1) dupExact.push(g);
+      else dupPrice.push(g);
+    });
+
+    if (dupExact.length) {
+      checks.push({
+        stage: 'suspicious', status: 'warn', id: 'dup-lines', label: 'Repeated identical line items',
+        detail: dupExact.map((g) => '“' + g[0].name + '” appears ' + g.length + ' times at ' + m(g[0].amount)).join('; ') +
+          '. Genuine duplicates do happen, but a repeated line is also the simplest way to inflate a bill.',
+      });
+      findings.push({
+        stage: 'suspicious', severity: 'medium', id: 'dup-lines',
+        title: 'The same line item is repeated',
+        detail: 'Identical descriptions at identical prices appear more than once. Chargebacks and expense fraud frequently rely on exactly this.',
+        evidence: dupExact.map((g) => g.map((i) => i.raw).join('\n')).join('\n---\n'),
+      });
+    }
+    if (dupPrice.length) {
+      checks.push({
+        stage: 'suspicious', status: 'fail', id: 'dup-name-two-prices', label: 'Same item, two different prices',
+        detail: dupPrice.map((g) => '“' + g[0].name + '” is priced at ' + g.map((i) => m(i.amount)).join(' and ')).join('; ') + '.',
+      });
+      findings.push({
+        stage: 'suspicious', severity: 'medium', id: 'dup-name-two-prices',
+        title: 'One item carries two different prices',
+        detail: 'The same description is billed at two different line totals, which usually means one of the two was edited.',
+        evidence: dupPrice.map((g) => g.map((i) => i.raw).join('\n')).join('\n---\n'),
+      });
+    }
+
+    /* no tax anywhere */
+    if (items.length >= 3 && !receipt.taxes.length) {
+      checks.push({
+        stage: 'suspicious', status: 'warn', id: 'no-tax', label: 'No tax line on the receipt',
+        detail: 'A multi-item retail receipt with no tax or VAT line at all is unusual in most jurisdictions, though some merchants are exempt.',
+      });
+      findings.push({
+        stage: 'suspicious', severity: 'low', id: 'no-tax',
+        title: 'No tax line anywhere on the document',
+        detail: 'There is nothing to cross-check the net amount against. This is weak on its own — some merchants print a tax-inclusive total — but it removes one of the checks a genuine receipt usually supports.',
+        evidence: items.length + ' line items, 0 tax rows recognised',
+      });
+    }
+
+    /* tax rows with no rate */
+    const taxesWithoutRate = receipt.taxes.filter((t) => !Number.isFinite(t.rate));
+    if (receipt.taxes.length && taxesWithoutRate.length === receipt.taxes.length) {
+      checks.push({
+        stage: 'suspicious', status: 'warn', id: 'tax-no-rate', label: 'Tax rows carry no percentage',
+        detail: 'A tax amount is printed but no rate accompanies it, so the rate cannot be verified against the net amount.',
+      });
+    }
+
+    /* identifiers */
+    const hasInvoice = !!receipt.meta.invoiceNo;
+    const hasDate = !!receipt.meta.date;
+    if (!hasInvoice && !hasDate) {
+      checks.push({
+        stage: 'suspicious', status: 'warn', id: 'no-ids', label: 'No transaction identifiers',
+        detail: 'Neither an invoice/bill number nor a date could be read. An expense that cannot be tied to a numbered document is hard to verify.',
+      });
+      findings.push({
+        stage: 'suspicious', severity: 'low', id: 'no-ids',
+        title: 'No invoice number or date on the receipt',
+        detail: 'There is no identifier to reconcile this bill against a merchant record or a bank line.',
+        evidence: 'merchant: ' + (receipt.meta.merchant || 'unknown'),
+      });
+    }
+
+    /* discrepancies that are suspiciously round, or equal a line item */
+    const deltas = (math.checks || []).filter((c) => (c.status === 'fail' || c.status === 'warn') && Number.isFinite(c.delta) && c.delta !== 0);
+    const roundHits = [];
+    const lineHits = [];
+    deltas.forEach((c) => {
+      const unit = roundUnit(c.delta);
+      if (unit) roundHits.push({ check: c, unit });
+      const item = items.find((i) => Math.abs(Math.abs(c.delta) - i.amount) <= 0.03);
+      if (item) lineHits.push({ check: c, item });
+    });
+
+    if (roundHits.length) {
+      const biggest = roundHits.slice().sort((a, b) => b.unit - a.unit)[0];
+      roundHits.forEach((h) => {
+        checks.push({
+          stage: 'suspicious', status: 'fail', id: 'round-gap-' + h.check.id, label: 'Discrepancy is an exactly round amount',
+          detail: 'The gap between the printed and recomputed value is exactly ' + m(Math.abs(h.check.delta)) +
+            ' — a round multiple of ' + m(h.unit) + '. Rounding and tax never produce a number like that; a person editing a figure does.',
+        });
+      });
+      findings.push({
+        stage: 'suspicious', severity: biggest.unit >= 500 ? 'high' : 'medium', id: 'round-gap',
+        title: 'The arithmetic gap is an exactly round amount',
+        detail: 'Edited figures usually differ from the truth by a round number a human typed, not by the fractional amounts that rounding and tax produce.',
+        evidence: roundHits.map((h) => '“' + h.check.label + '”: printed ' + m(h.check.printed) + ' vs computed ' + m(h.check.computed) +
+          ' → gap of exactly ' + m(Math.abs(h.check.delta))).join('\n'),
+        region: null,
+      });
+    }
+
+    if (lineHits.length) {
+      const best = lineHits[0];
+      checks.push({
+        stage: 'suspicious', status: 'fail', id: 'gap-equals-line', label: 'Discrepancy equals a single line item',
+        detail: 'The gap between the printed and recomputed value is exactly the value of the “' + best.item.name + '” line (' + m(best.item.amount) + ').',
+      });
+      findings.push({
+        stage: 'suspicious', severity: 'high', id: 'gap-equals-line',
+        title: 'The discrepancy equals exactly one line item',
+        detail: 'The difference between what the receipt prints and what its own figures support is the value of one billed line — the classic signature of a line being added, doubled or retyped.',
+        evidence: lineHits.map((h) => '“' + h.check.label + '” gap ' + m(Math.abs(h.check.delta)) +
+          ' = “' + h.item.name + '” at ' + m(h.item.amount)).join('\n'),
+      });
+    }
+
+    /* total below a line item */
+    if (items.length >= 2 && Number.isFinite(receipt.totals.total)) {
+      const maxItem = items.reduce((a, b) => (b.amount > a.amount ? b : a), items[0]);
+      if (receipt.totals.total < maxItem.amount - 0.05) {
+        checks.push({
+          stage: 'suspicious', status: 'fail', id: 'total-below-item', label: 'Grand total is below a line item',
+          detail: 'The printed total ' + m(receipt.totals.total) + ' is less than the single line “' + maxItem.name + '” at ' + m(maxItem.amount) +
+            '. A total can never be smaller than one of the items it is made of.',
+        });
+        findings.push({
+          stage: 'suspicious', severity: 'high', id: 'total-below-item',
+          title: 'Grand total is smaller than one of its own line items',
+          detail: 'No sequence of discounts or taxes can push a total below one of the items it contains, so at least one of the two figures has been rewritten.',
+          evidence: 'total ' + m(receipt.totals.total) + ' < “' + maxItem.name + '” ' + m(maxItem.amount),
+        });
+      }
+    }
+
+    /* it all hangs together */
+    if (!findings.length) {
+      checks.push({
+        stage: 'suspicious', status: 'pass', id: 'logic-clean', label: 'No logical or statistical anomalies',
+        detail: 'No repeated lines, no round-number discrepancies, no missing identifiers and no impossible totals were found.',
+      });
+    }
+
+    return { checks, findings };
+  }
+
+  /* ── stage 7: scoring ────────────────────────────────────── */
+  function score(findings) {
+    const risk = U.clamp(findings.reduce((s, f) => s + (WEIGHT[f.severity] || 0), 0), 0, 100);
+    const band = BANDS.find((b) => risk <= b.max) || BANDS[BANDS.length - 1];
+    const counts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+    findings.forEach((f) => { counts[f.severity] = (counts[f.severity] || 0) + 1; });
+    return { risk: Math.round(risk), band: band.band, tone: band.tone, counts };
+  }
+
+  function composeVerdict(input) {
+    const { math, suspicious, receipt, meta } = input;
+    const visual = input.visual || { regions: [], findings: [], file: null };
+    const sym = receipt.currency.symbol;
+    const m = (v) => U.fmtMoney(v, sym);
+    const parts = [];
+
+    if (!math.checks.length || !receipt.items.length) {
+      parts.push('Very little could be read from this document, so the arithmetic behind it is largely unverified.');
+    } else if (math.reconciles) {
+      parts.push('Every equation this receipt asserts checks out: the item lines add up to the subtotal and the printed grand total follows from the numbers the document itself provides.');
+    } else {
+      const bad = math.checks.filter((c) => c.status === 'fail').sort((a, b) => Math.abs(b.delta || 0) - Math.abs(a.delta || 0));
+      const worst = bad[0];
+      if (worst) {
+        const named = /^Line \d+:/.test(worst.label)
+          ? 'the “' + worst.label.replace(/^Line \d+: /, '') + '” line'
+          : '“' + worst.label + '”';
+        parts.push('The arithmetic does not reconcile: ' + named + ' supports ' + m(worst.computed) +
+          ' while the receipt prints ' + m(worst.printed) + ', a difference of ' + m(Math.abs(worst.delta)) + '.');
+      } else {
+        parts.push('The arithmetic does not fully reconcile.');
+      }
+    }
+
+    if (!meta.ranVisual) {
+      parts.push('Visual tampering analysis was not run because no image was supplied.');
+    } else if (visual.regions.length) {
+      const kinds = Array.from(new Set(visual.regions.flatMap((r) => r.kinds || [])));
+      parts.push('The image stage flagged ' + visual.regions.length + ' region(s) inconsistent with the rest of the file' +
+        (kinds.length ? ' (' + kinds.join(', ') + ')' : '') + '.');
+      const tone = visual.findings.find((f) => f.id === 'tone-patch');
+      if (tone) parts.push('Most telling: ' + tone.detail.split('.')[0].charAt(0).toLowerCase() + tone.detail.split('.')[0].slice(1) + '.');
+    } else {
+      parts.push('The image stage found nothing inconsistent in the pixels.');
+    }
+
+    if (meta.editor) parts.push('The file container names ' + meta.editor + ', so the image has been through an editor at least once.');
+    if (suspicious.findings.length) {
+      parts.push(suspicious.findings.length + ' separate suspicious-information signal(s) also fired.');
+    }
+
+    return parts.join(' ');
+  }
+
+  /* ── assembly ────────────────────────────────────────────── */
+  /**
+   * @param {object} ctx {receipt, math, visual, suspicious, ocr, meta}
+   * @returns the report object shared by the UI and the JSON export
+   */
+  function build(ctx) {
+    const { receipt, math, visual, suspicious, ocr, meta } = ctx;
+
+    /* math checks → findings */
+    const mathFindings = [];
+    (math.checks || []).forEach((c) => {
+      if (c.status === 'fail' || c.status === 'warn') {
+        const sev = c.status === 'warn' ? downgrade(c.severity) : c.severity;
+        mathFindings.push({
+          stage: 'math',
+          severity: sev,
+          id: 'math-' + c.id,
+          title: c.label,
+          detail: c.detail,
+          evidence: c.equation + '\nprinted  ' + (Number.isFinite(c.printed) ? U.fmtMoney(c.printed, receipt.currency.symbol) : '—') +
+            '\nrecomputed ' + (Number.isFinite(c.computed) ? U.fmtMoney(c.computed, receipt.currency.symbol) : '—') +
+            (Number.isFinite(c.delta) ? '\ndifference ' + U.fmtDelta(c.delta) : ''),
+          region: null,
+        });
+      }
+    });
+
+    /* a few passes are worth showing as evidence of work done */
+    const NOTABLE_PASS = ['items-sum-subtotal', 'net-tax-total', 'line-qty-unit'];
+    (math.checks || []).forEach((c) => {
+      if (c.status === 'pass' && NOTABLE_PASS.indexOf(c.id) !== -1) {
+        mathFindings.push({
+          stage: 'math',
+          severity: 'info',
+          id: 'math-ok-' + c.id,
+          title: c.label + ' — verified',
+          detail: c.detail,
+          evidence: c.equation,
+          region: null,
+        });
+      }
+    });
+
+    const findings = [
+      ...mathFindings,
+      ...(visual.findings || []),
+      ...(suspicious.findings || []),
+    ].sort((a, b) => (ORDER[a.severity] - ORDER[b.severity]) || a.title.localeCompare(b.title));
+
+    const risk = score(findings);
+
+    const allChecks = [
+      ...(math.checks || []),
+      ...((visual.checks) || []),
+      ...((suspicious.checks) || []),
+    ];
+    const passed = allChecks.filter((c) => c.status === 'pass').length;
+    const failed = allChecks.filter((c) => c.status === 'fail').length;
+
+    const stagesRun = ['upload', 'ocr', 'parse', 'math', 'visual', 'suspicious', 'report'];
+
+    const verdict = composeVerdict({
+      math, visual, suspicious, receipt,
+      meta: {
+        ...meta,
+        editor: (visual.file && (visual.file.software || (visual.file.editorTags || [])[0])) || null,
+      },
+    });
+
+    return {
+      version: '1.0',
+      generatedAt: new Date().toISOString(),
+      source: meta.source,
+      stages: stagesRun.map((id) => ({
+        id,
+        label: STAGE_LABEL[id],
+        status: meta.ranVisual || id !== 'visual' ? 'ran' : 'skipped',
+      })),
+      risk,
+      verdict,
+      summary: {
+        ocrConfidence: ocr && ocr.words && ocr.words.length ? Math.round(ocr.conf) : null,
+        linesRead: ocr ? (ocr.lines || []).length : 0,
+        wordsRead: ocr ? (ocr.words || []).length : 0,
+        items: receipt.items.length,
+        checksPassed: passed,
+        checksFailed: failed,
+        checksTotal: allChecks.length,
+        findings: findings.length,
+        ranVisual: !!meta.ranVisual,
+      },
+      receipt: {
+        currency: receipt.currency,
+        merchant: receipt.meta.merchant || null,
+        invoiceNo: receipt.meta.invoiceNo || null,
+        date: receipt.meta.date || null,
+        time: receipt.meta.time || null,
+        gstin: receipt.meta.gstin || null,
+        payment: receipt.meta.payment || null,
+        items: receipt.items.map((i) => ({
+          name: i.name,
+          qty: i.qty,
+          qtyStated: i.qtyStated,
+          unit: i.unit,
+          unitStated: i.unitStated,
+          unitDerived: i.unitDerived,
+          amount: i.amount,
+          confidence: i.geo && i.geo.conf !== null && i.geo.conf !== undefined ? Math.round(i.geo.conf) : null,
+          raw: i.raw,
+        })),
+        taxes: receipt.taxes.map((t) => ({ label: t.label, amount: t.amount, rate: t.rate })),
+        totals: receipt.totals,
+        itemsSum: receipt.itemsSum,
+      },
+      math: {
+        reconciles: math.reconciles,
+        computedTotal: math.computedTotal,
+        summary: math.summary,
+        checks: math.checks,
+      },
+      visual: {
+        ran: !!meta.ranVisual,
+        note: visual.note || '',
+        stats: visual.ela ? {
+          errorLevelMedian: Number(visual.ela.stats.median.toFixed(2)),
+          errorLevelP99: Number(visual.ela.stats.p99.toFixed(2)),
+          paperTone: visual.tone ? Number(visual.tone.tone.toFixed(1)) : null,
+          paperToneSpread: visual.tone ? Number(visual.tone.spread.toFixed(2)) : null,
+          amountWordsCompared: visual.typo ? visual.typo.amountWords : 0,
+        } : null,
+        file: visual.file ? {
+          isJpeg: visual.file.isJpeg,
+          editorTags: visual.file.editorTags,
+          creatorTool: visual.file.software,
+          appSegments: visual.file.appSegments,
+          bytes: visual.file.size,
+        } : null,
+        checks: visual.checks || [],
+        regions: (visual.regions || []).map((r) => ({
+          index: r.index, x: r.x, y: r.y, width: r.w, height: r.h,
+          signals: r.kinds, score: Number(r.score.toFixed(2)), why: r.why,
+        })),
+      },
+      suspicious: suspicious.checks,
+      findings: findings.map((f) => ({
+        ...f,
+        // hand the consumer a region reference, not a raw pixel box
+        region: f.region && f.region.index ? f.region.index : null,
+      })),
+    };
+  }
+
+  RS.report = { build, detectSuspicious, score, composeVerdict, WEIGHT, SEV_LABEL, STAGE_LABEL, ORDER };
+})(window);
+</script>
+<script>
+/* ==========================================================================
+   ReceiptShield — app.js
+   Runs the pipeline end to end and paints the report.
+
+   Exposes window.RS.app (for debugging from the console)
+   ========================================================================== */
+(function (global) {
+  'use strict';
+
+  const RS = global.RS;
+  const U = RS.util;
+  const { $, $$, esc } = U;
+
+  const DIAL_C = 2 * Math.PI * 72;
+  const TONE_COLOR = { ok: '#3ddc84', info: '#60a5fa', warn: '#f5a524', danger: '#f4536a' };
+  const STAGE_NUM = { upload: '01', ocr: '02', parse: '03', math: '04', visual: '05', suspicious: '06', report: '07' };
+
+  const DEFAULT_NOTES = {
+    upload: 'Image accepted and normalised',
+    ocr: 'Text, word boxes and confidence',
+    parse: 'Fields pulled from the text',
+    math: 'Line, subtotal and total arithmetic',
+    visual: 'Error-level, tone and typography forensics',
+    suspicious: 'Logical and statistical anomalies',
+    report: 'Weighted score, findings, evidence',
+  };
+
+  const state = {
+    mode: 'image',
+    file: null,
+    canvas: null,
+    ocr: null,
+    receipt: null,
+    math: null,
+    visual: null,
+    suspicious: null,
+    report: null,
+    truth: null,
+    filter: 'all',
+    view: { regions: true, heat: true, text: true, amp: false },
+    running: false,
+  };
+
+  /* ── tiny UI helpers ─────────────────────────────────────── */
+  function showBanner(kind, html) {
+    const b = $('#banner');
+    b.className = 'banner banner--' + kind;
+    b.innerHTML = html;
+    b.hidden = false;
+  }
+  const hideBanner = () => { $('#banner').hidden = true; };
+
+  function setTag(text, cls) {
+    const t = $('#runTag');
+    t.textContent = text;
+    t.className = 'tag' + (cls ? ' ' + cls : '');
+  }
+
+  function live(msg) { $('#statusLive').textContent = msg; }
+
+  const stageLi = (id) => $('#stages li[data-stage="' + id + '"]');
+  function setStage(id, status, note) {
+    const li = stageLi(id);
+    if (!li) return;
+    li.className = status ? 'is-' + status : '';
+    if (note !== undefined) li.querySelector('div > span').textContent = note;
+  }
+  function resetStages() {
+    $$('#stages li').forEach((li) => {
+      li.className = '';
+      li.querySelector('div > span').textContent = DEFAULT_NOTES[li.dataset.stage] || '';
+    });
+  }
+
+  function updateOcr(p) {
+    const pct = Math.round((p.progress || 0) * 100);
+    $('#ocrPhase').textContent = p.phase || 'Working…';
+    $('#ocrPct').textContent = pct + '%';
+    $('#ocrFill').style.width = pct + '%';
+  }
+
+  /* ── file / image handling ───────────────────────────────── */
+  function blobToCanvas(blob) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const c = document.createElement('canvas');
+          c.width = img.naturalWidth;
+          c.height = img.naturalHeight;
+          c.getContext('2d', { willReadFrequently: true }).drawImage(img, 0, 0);
+          resolve(c);
+        } finally { URL.revokeObjectURL(url); }
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('That file could not be decoded as an image.')); };
+      img.src = url;
+    });
+  }
+
+  function setFile(blob, name, note) {
+    if (state.file && state.file.url) URL.revokeObjectURL(state.file.url);
+    state.file = {
+      blob,
+      name: name || 'receipt',
+      url: URL.createObjectURL(blob),
+      type: blob.type || 'image/png',
+    };
+    state.truth = note || null;
+    renderDropzone();
+    markReady();
+  }
+
+  function renderDropzone() {
+    const file = state.file;
+    $('#dzDefault').hidden = !!file;
+    const box = $('#dzFile');
+    box.hidden = !file;
+    if (!file) return;
+    box.innerHTML =
+      '<img src="' + file.url + '" alt="Receipt preview" />' +
+      '<p><strong>' + esc(file.name) + '</strong>' +
+      (file.blob.size / 1024).toFixed(0) + ' KB · ' + esc(file.type) + '<br />Click to replace, or drop another file.</p>';
+
+    const sn = $('#sampleNote');
+    if (state.truth) {
+      sn.hidden = false;
+      sn.innerHTML = '<strong>Sample ground truth, shown for reference only:</strong> ' + esc(state.truth);
+    } else {
+      sn.hidden = true;
+    }
+  }
+
+  function markReady() {
+    const ready = state.mode === 'image' ? !!state.file : !!$('#textInput').value.trim();
+    $('#btnRun').disabled = !ready;
+  }
+
+  /* ── samples ─────────────────────────────────────────────── */
+  async function loadSample(kind) {
+    hideBanner();
+    const btn = kind === 'tampered' ? $('#btnTampered') : $('#btnGenuine');
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Generating…';
+    try {
+      const s = await RS.samples.build(kind);
+      setFile(s.blob, s.name, s.truth.note);
+      showBanner('ok', 'Loaded the <strong>' + kind + '</strong> sample. Press <strong>Run detection</strong> to analyse it.');
+    } catch (err) {
+      console.error(err);
+      showBanner('err', 'Could not generate the sample: ' + esc(err.message || String(err)));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  }
+
+  /* ── the pipeline ────────────────────────────────────────── */
+  async function run() {
+    if (state.running) return;
+    state.running = true;
+    $('#btnRun').disabled = true;
+    $('#results').hidden = true;
+    hideBanner();
+    resetStages();
+    setTag('running', 'is-run');
+    live('Analysis started');
+
+    try {
+      const report = state.mode === 'image' ? await runImage() : await runText();
+      paint(report);
+      finishBanner(report);
+      setTag('complete', 'is-done');
+      live('Analysis complete. Risk score ' + report.risk.risk + ' of 100, ' + report.risk.band + '.');
+    } catch (err) {
+      console.error(err);
+      const active = $('#stages li.is-active');
+      if (active) active.className = 'is-fail';
+      showBanner('err', '<strong>Analysis stopped.</strong> ' + esc(err.message || String(err)));
+      setTag('failed', 'is-fail');
+      live('Analysis stopped: ' + (err.message || String(err)));
+    } finally {
+      state.running = false;
+      $('#ocrbar').hidden = true;
+      $('#btnRun').disabled = false;
+      $('#btnReset').hidden = false;
+    }
+  }
+
+  async function runImage() {
+    const src = state.file;
+
+    /* 1 — upload */
+    setStage('upload', 'active', 'Decoding the image…');
+    const canvas = await blobToCanvas(src.blob);
+    state.canvas = canvas;
+    if (canvas.width < 200 || canvas.height < 120) {
+      throw new Error('That image is too small to analyse (' + canvas.width + '×' + canvas.height + '). Receipts need at least a few hundred pixels of width.');
+    }
+    setStage('upload', 'done', canvas.width + ' × ' + canvas.height + ' px · ' + esc(src.type));
+    live('Receipt loaded');
+
+    /* 2 — OCR */
+    setStage('ocr', 'active', 'Starting the OCR engine…');
+    $('#ocrbar').hidden = false;
+    updateOcr({ phase: 'Starting the OCR engine…', progress: 0 });
+    state.ocr = await RS.ocr.recognize(canvas, (p) => {
+      updateOcr(p);
+      setStage('ocr', 'active', p.phase + ' — ' + Math.round((p.progress || 0) * 100) + '%');
+    });
+    $('#ocrbar').hidden = true;
+
+    if (state.ocr.empty) {
+      setStage('ocr', 'fail', 'No readable text found');
+      throw new Error('No text could be read from this image. Try a sharper photo, more contrast, or paste the receipt text instead.');
+    }
+    setStage('ocr', 'done', state.ocr.words.length + ' words · ' + Math.round(state.ocr.conf) + '% confidence');
+    live('OCR finished');
+
+    return await finishStages(state.ocr.text, state.ocr.lines, 'image', src.blob);
+  }
+
+  async function runText() {
+    const text = $('#textInput').value;
+    setStage('upload', 'skip', 'Skipped — text was pasted directly');
+    setStage('ocr', 'skip', 'Skipped — no image to read');
+    state.canvas = null;
+    state.ocr = null;
+    live('Using pasted text');
+    return await finishStages(text, null, 'text', null);
+  }
+
+  async function finishStages(text, lines, source, blob) {
+    /* 3 — parse */
+    setStage('parse', 'active', 'Classifying lines…');
+    await U.sleep(30);
+    const receipt = RS.parse.parse({ text, lines, source });
+    state.receipt = receipt;
+    setStage('parse', 'done',
+      receipt.counts.items + ' item(s), ' + receipt.taxes.length + ' tax row(s), ' + receipt.adjustments.length + ' adjustment(s)');
+    live('Receipt parsed');
+
+    /* 4 — maths */
+    setStage('math', 'active', 'Recomputing every equation…');
+    await U.sleep(30);
+    const math = RS.validate.validate(receipt);
+    state.math = math;
+    setStage('math', math.summary.fail ? 'warn' : 'done',
+      math.summary.pass + ' passed · ' + math.summary.warn + ' warning(s) · ' + math.summary.fail + ' failed');
+    live('Arithmetic validated');
+
+    /* 5 — visual */
+    let visual;
+    if (source === 'image') {
+      setStage('visual', 'active', 'Running error-level analysis…');
+      await U.sleep(30);
+      visual = await RS.visual.analyze(state.canvas, receipt, state.ocr, blob);
+      visual.ran = true;
+      state.visual = visual;
+      setStage('visual', visual.regions.length ? 'warn' : 'done',
+        visual.regions.length + ' suspicious region(s) · ' + visual.typo.amountWords + ' amounts compared');
+      live('Image forensics done');
+    } else {
+      visual = {
+        ran: false,
+        checks: [{
+          stage: 'visual', status: 'skip', label: 'Visual Tampering Analysis', id: 'skipped',
+          detail: 'No image was supplied. Stages 1 and 5 need a picture of the receipt to work on.',
+        }],
+        findings: [], regions: [], note: '', file: null, ela: null, tone: null, typo: { amountWords: 0 },
+      };
+      state.visual = visual;
+      setStage('visual', 'skip', 'Skipped — no image supplied');
+    }
+
+    /* 6 — suspicious information */
+    setStage('suspicious', 'active', 'Looking for logical anomalies…');
+    await U.sleep(30);
+    const suspicious = RS.report.detectSuspicious(receipt, math);
+    state.suspicious = suspicious;
+    const suspiciousBad = suspicious.checks.filter((c) => c.status === 'fail' || c.status === 'warn').length;
+    setStage('suspicious', suspiciousBad ? 'warn' : 'done',
+      suspiciousBad ? suspiciousBad + ' anomaly signal(s)' : 'no anomalies found');
+    live('Anomaly scan done');
+
+    /* 7 — report */
+    setStage('report', 'active', 'Weighting findings…');
+    await U.sleep(30);
+    const report = RS.report.build({
+      receipt, math, visual, suspicious,
+      ocr: state.ocr,
+      meta: { ranVisual: source === 'image', source },
+    });
+    state.report = report;
+    setStage('report', report.risk.risk >= 45 ? 'warn' : 'done',
+      report.risk.risk + '/100 · ' + report.risk.band);
+    return report;
+  }
+
+  function finishBanner(report) {
+    const s = report.summary;
+    if (s.ranVisual && s.ocrConfidence !== null && s.ocrConfidence < 60) {
+      showBanner('warn',
+        '<strong>Low OCR confidence (' + s.ocrConfidence + '%).</strong> Some figures may have been misread, which can create false positives in the arithmetic stage. Treat the extracts below as approximate, or retry with a sharper image.');
+    } else if (!s.ranVisual) {
+      showBanner('warn',
+        '<strong>Text-mode run.</strong> Stages 3, 4, 6 and 7 ran against the pasted text. Visual tampering analysis needs a receipt image.');
+    } else {
+      showBanner('ok',
+        '<strong>Analysis complete.</strong> ' + s.items + ' line item(s) extracted at ' + s.ocrConfidence +
+        '% OCR confidence · ' + s.checksPassed + ' of ' + s.checksTotal + ' checks passed · ' +
+        s.findings + ' finding(s) across ' + (report.risk.counts.critical + report.risk.counts.high + report.risk.counts.medium + report.risk.counts.low) + ' flagged.');
+    }
+  }
+
+  /* ── painting ────────────────────────────────────────────── */
+  function paint(report) {
+    $('#results').hidden = false;
+    $('#reportSubtitle').innerHTML =
+      'Source: <strong>' + esc(state.mode === 'image' ? (state.file && state.file.name || 'image') : 'pasted text') +
+      '</strong> · generated ' + new Date(report.generatedAt).toLocaleString() +
+      ' · the entire analysis ran on this device.';
+
+    renderRisk(report);
+    renderTiles(report);
+    renderFindings();
+    renderExtraction(report);
+    renderMath(report);
+    renderJson(report);
+    renderVisual(report);
+    $$('.tab').forEach((t) => t.classList.toggle('is-active', t.dataset.tab === 'findings'));
+    $$('.tabpanel').forEach((p) => p.classList.toggle('is-active', p.dataset.panel === 'findings'));
+    $('#results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function renderRisk(report) {
+    const r = report.risk;
+    $('#riskScore').textContent = r.risk;
+    const dv = $('#dialValue');
+    dv.style.strokeDasharray = DIAL_C;
+    dv.style.strokeDashoffset = DIAL_C;
+    requestAnimationFrame(() => {
+      dv.style.stroke = TONE_COLOR[r.tone];
+      dv.style.strokeDashoffset = DIAL_C * (1 - r.risk / 100);
+    });
+    const band = $('#riskBand');
+    band.textContent = r.band;
+    band.style.color = TONE_COLOR[r.tone];
+    $('#riskVerdict').textContent = report.verdict;
+
+    const labels = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low', info: 'Passed' };
+    $('#riskCounts').innerHTML = ['critical', 'high', 'medium', 'low', 'info']
+      .filter((k) => r.counts[k])
+      .map((k) => '<li><span class="dot dot--' + k + '"></span>' + labels[k] + ' <b>' + r.counts[k] + '</b></li>')
+      .join('') || '<li class="muted">No findings</li>';
+  }
+
+  function renderTiles(report) {
+    const s = report.summary;
+    const set = (id, html) => { $('#' + id).innerHTML = html; };
+    set('tileConf', s.ocrConfidence === null ? '<span class="muted">n/a</span>' : s.ocrConfidence + '<small>%</small>');
+    set('tileLines', s.linesRead || '<span class="muted">—</span>');
+    set('tileItems', s.items);
+    set('tileChecks', s.checksPassed + '<small>/' + s.checksTotal + '</small>');
+    set('tileFlags', s.findings);
+    set('tileStages', (s.ranVisual ? 7 : 6) + '<small>/7</small>');
+  }
+
+  function renderFindings() {
+    const report = state.report;
+    if (!report) return;
+    const filter = state.filter;
+    const list = report.findings.filter((f) => filter === 'all' || f.severity === filter);
+    const host = $('#findingsList');
+
+    if (!list.length) {
+      host.innerHTML = '<div class="empty">' +
+        (filter === 'all'
+          ? 'No findings at all — the arithmetic reconciles and the image stage found nothing inconsistent.'
+          : 'No findings in this severity band.') + '</div>';
+      return;
+    }
+
+    host.innerHTML = list.map((f) => {
+      const region = f.region
+        ? '<button class="linkish" data-region="' + f.region + '">Evidence region #' + f.region + ' in the visual viewer →</button>'
+        : '';
+      return '<article class="finding finding--' + f.severity + '">' +
+        '<div class="finding__top">' +
+          '<span class="finding__sev sev-' + f.severity + '">' + RS.report.SEV_LABEL[f.severity] + '</span>' +
+          '<span class="finding__stage">Stage ' + (STAGE_NUM[f.stage] || '--') + ' · ' + esc(RS.report.STAGE_LABEL[f.stage] || f.stage) + '</span>' +
+        '</div>' +
+        '<h4>' + esc(f.title) + '</h4>' +
+        '<p>' + esc(f.detail) + '</p>' +
+        (f.evidence ? '<pre class="finding__ev">' + esc(f.evidence) + '</pre>' : '') +
+        (region ? '<p class="finding__where">' + region + '</p>' : '') +
+        '</article>';
+    }).join('');
+  }
+
+  function renderExtraction(report) {
+    const r = report.receipt;
+    const sym = r.currency.symbol;
+
+    $('#tblItems tbody').innerHTML = r.items.length
+      ? r.items.map((i, n) => '<tr>' +
+          '<td class="num">' + (n + 1) + '</td>' +
+          '<td class="desc">' + esc(i.name) + '</td>' +
+          '<td class="num">' + (i.qtyStated ? i.qty : '<span class="muted">' + i.qty + '*</span>') + '</td>' +
+          '<td class="num">' + (i.unitDerived
+            ? '<span class="muted" title="Derived from the line total ÷ quantity">' + U.fmtMoney(i.unit, sym) + '</span>'
+            : U.fmtMoney(i.unit, sym)) + '</td>' +
+          '<td class="num">' + U.fmtMoney(i.amount, sym) + '</td>' +
+          '<td class="num">' + (i.confidence === null ? '<span class="muted">—</span>' :
+            '<span class="' + (i.confidence >= 80 ? 'pos' : i.confidence >= 55 ? '' : 'neg') + '">' + i.confidence + '</span>') + '</td>' +
+        '</tr>').join('')
+      : '<tr><td colspan="6" class="muted">No priced line items could be extracted.</td></tr>';
+
+    const row = (k, v, cls) => '<dt>' + esc(k) + '</dt><dd' + (cls ? ' class="' + cls + '"' : '') + '>' + v + '</dd>';
+    let html = '';
+    html += row('Merchant', esc(r.merchant || '—'));
+    html += row('Invoice no.', esc(r.invoiceNo || '—'));
+    html += row('Date', esc([r.date, r.time].filter(Boolean).join(' ') || '—'));
+    html += row('GSTIN / tax id', esc(r.gstin || '—'));
+    html += row('Currency detected', r.currency.code ? esc(r.currency.code + ' ' + r.currency.symbol) : '—');
+    html += row('Items total (Σ lines)', U.fmtMoney(r.itemsSum, sym));
+    if (Number.isFinite(r.totals.subtotal)) html += row('Printed subtotal', U.fmtMoney(r.totals.subtotal, sym));
+    if (Number.isFinite(r.totals.discount)) html += row('Discount', U.fmtMoney(r.totals.discount, sym));
+    if (Number.isFinite(r.totals.taxable)) html += row('Taxable value', U.fmtMoney(r.totals.taxable, sym));
+    r.taxes.forEach((t) => { html += row(t.label.replace(/\s+/g, ' '), U.fmtMoney(t.amount, sym)); });
+    if (Number.isFinite(r.totals.roundOff)) html += row('Rounding', U.fmtMoney(r.totals.roundOff, sym));
+    html += row('<strong>Printed grand total</strong>', '<strong>' + U.fmtMoney(r.totals.total, sym) + '</strong>');
+    if (report.math.computedTotal !== null) {
+      const diff = U.round2(r.totals.total - report.math.computedTotal);
+      html += row('Total from the receipt’s own figures', U.fmtMoney(report.math.computedTotal, sym));
+      html += row('Difference', '<span class="' + (Math.abs(diff) < 0.02 ? 'pos' : 'neg') + '">' + U.fmtDelta(diff) + '</span>');
+    }
+    if (Number.isFinite(r.totals.tendered)) html += row('Paid', U.fmtMoney(r.totals.tendered, sym));
+    if (Number.isFinite(r.totals.change)) html += row('Change', U.fmtMoney(r.totals.change, sym));
+    $('#dlTotals').innerHTML = html;
+
+    $('#rawText').textContent = state.ocr ? state.ocr.text : ($('#textInput').value || '');
+  }
+
+  function renderMath(report) {
+    const sym = report.receipt.currency.symbol;
+    const rows = report.math.checks.map((c) => {
+      const pill = { pass: 'pass', warn: 'warn', fail: 'fail', skip: 'skip' }[c.status];
+      const label = { pass: 'Pass', warn: 'Warning', fail: 'Fail', skip: 'Skipped' }[c.status];
+      const num = (v) => (Number.isFinite(v) ? U.fmtMoney(v, sym) : '<span class="muted">—</span>');
+      const deltaCls = !Number.isFinite(c.delta) ? '' : (Math.abs(c.delta) <= (c.tol || 0) ? 'pos' : 'neg');
+      return '<tr>' +
+        '<td class="desc">' + esc(c.label) + '</td>' +
+        '<td class="mono muted">' + esc(c.equation || '') + '</td>' +
+        '<td class="num">' + num(c.printed) + '</td>' +
+        '<td class="num">' + num(c.computed) + '</td>' +
+        '<td class="num ' + deltaCls + '">' + (Number.isFinite(c.delta) ? U.fmtDelta(c.delta) : '—') + '</td>' +
+        '<td><span class="pill pill--' + pill + '">' + label + '</span></td>' +
+      '</tr>';
+    }).join('');
+    $('#tblMath tbody').innerHTML = rows || '<tr><td colspan="6" class="muted">No arithmetic could be checked.</td></tr>';
+  }
+
+  function renderVisual(report) {
+    const v = report.visual;
+    const note = $('#visualNote');
+    $('#tblRegions tbody').innerHTML = (v.regions || []).length
+      ? v.regions.map((r) => '<tr>' +
+          '<td class="num">#' + r.index + '</td>' +
+          '<td class="mono">' + r.x + ', ' + r.y + ' · ' + r.width + ' × ' + r.height + '</td>' +
+          '<td>' + (r.signals || []).map((s) => '<span class="pill pill--warn">' + esc(s) + '</span>').join(' ') + '</td>' +
+          '<td class="num">' + r.score.toFixed(2) + '</td>' +
+          '<td class="desc">' + esc((r.why || []).join(' · ')) + '</td>' +
+        '</tr>').join('')
+      : '<tr><td colspan="5" class="muted">No suspicious regions.</td></tr>';
+
+    const cvOriginal = $('#cvOriginal');
+    const cvEla = $('#cvEla');
+    const cvBoxes = $('#cvBoxes');
+
+    if (!v.ran || !state.canvas) {
+      note.innerHTML = 'No image was supplied, so the pixel-level stages were skipped. Run an image through the detector to see error-level analysis, paper-tone mapping and typography forensics here.';
+      [cvOriginal, cvEla, cvBoxes].forEach((c) => {
+        c.width = 320; c.height = 120;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#0a0f17'; ctx.fillRect(0, 0, 320, 120);
+        ctx.fillStyle = '#6d7f94';
+        ctx.font = '13px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('not available in text mode', 160, 64);
+      });
+      return;
+    }
+
+    const st = v.stats || {};
+    note.innerHTML = 'Error-level baseline (median) ' + st.errorLevelMedian + ', 99th percentile ' + st.errorLevelP99 +
+      ' · paper tone ' + st.paperTone + ' ± ' + st.paperToneSpread +
+      ' · ' + st.amountWordsCompared + ' amounts compared on glyph height, character width and right-edge alignment. ' +
+      esc(v.note || '');
+
+    drawVisual();
+  }
+
+  function drawVisual() {
+    const visual = state.visual;
+    if (!visual || !visual.ran || !state.canvas) return;
+    const cvOriginal = $('#cvOriginal');
+    const cvEla = $('#cvEla');
+
+    cvOriginal.width = state.canvas.width;
+    cvOriginal.height = state.canvas.height;
+    cvOriginal.getContext('2d').drawImage(state.canvas, 0, 0);
+
+    RS.visual.renderHeat(cvEla, visual.ela.norm, state.canvas.width, state.canvas.height, state.view.amp ? 8 : 1);
+
+    RS.visual.drawOverlay($('#cvBoxes'), {
+      image: state.canvas,
+      regions: visual.regions,
+      words: state.ocr ? state.ocr.words : [],
+      showRegions: state.view.regions,
+      showHeat: state.view.heat,
+      showText: state.view.text,
+      heat: visual.ela.norm,
+      amplify: state.view.amp,
+    });
+  }
+
+  function renderJson(report) {
+    $('#jsonOut').textContent = JSON.stringify(report, null, 2);
+  }
+
+  /* ── tabs, filters, toggles ──────────────────────────────── */
+  function selectTab(name) {
+    $$('.tab').forEach((t) => {
+      const on = t.dataset.tab === name;
+      t.classList.toggle('is-active', on);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    $$('.tabpanel').forEach((p) => p.classList.toggle('is-active', p.dataset.panel === name));
+  }
+
+  function wire() {
+    /* modes */
+    $$('.mode').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.mode = btn.dataset.mode;
+        $$('.mode').forEach((b) => {
+          const on = b === btn;
+          b.classList.toggle('is-active', on);
+          b.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        $$('.mode-panel').forEach((p) => p.classList.toggle('is-active', p.dataset.panel === state.mode));
+        markReady();
+      });
+    });
+
+    /* file input + drop */
+    const dz = $('#dropzone');
+    const input = $('#fileInput');
+    dz.addEventListener('click', () => input.click());
+    dz.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+    });
+    input.addEventListener('change', () => {
+      const f = input.files && input.files[0];
+      if (!f) return;
+      if (!/^image\//.test(f.type)) { showBanner('err', 'That file is not an image. ReceiptShield needs a PNG, JPG or WEBP.'); return; }
+      hideBanner();
+      setFile(f, f.name);
+    });
+    ['dragenter', 'dragover'].forEach((ev) => dz.addEventListener(ev, (e) => {
+      e.preventDefault(); dz.classList.add('is-over');
+    }));
+    ['dragleave', 'drop'].forEach((ev) => dz.addEventListener(ev, (e) => {
+      e.preventDefault(); dz.classList.remove('is-over');
+    }));
+    dz.addEventListener('drop', (e) => {
+      const f = e.dataTransfer && e.dataTransfer.files[0];
+      if (!f) return;
+      if (!/^image\//.test(f.type)) { showBanner('err', 'That file is not an image.'); return; }
+      hideBanner();
+      setFile(f, f.name);
+    });
+    document.addEventListener('paste', (e) => {
+      if (state.mode !== 'image') return;
+      const items = (e.clipboardData && e.clipboardData.items) || [];
+      for (const it of items) {
+        if (it.type && it.type.indexOf('image/') === 0) {
+          const f = it.getAsFile();
+          if (f) { hideBanner(); setFile(f, 'pasted-image.' + (f.type.split('/')[1] || 'png')); }
+          break;
+        }
+      }
+    });
+
+    /* samples */
+    $('#btnGenuine').addEventListener('click', () => loadSample('genuine'));
+    $('#btnTampered').addEventListener('click', () => loadSample('tampered'));
+    $('#btnTextGenuine').addEventListener('click', () => {
+      $('#textInput').value = RS.samples.docToText(RS.samples.genuineDoc());
+      markReady();
+    });
+    $('#btnTextTampered').addEventListener('click', () => {
+      $('#textInput').value = RS.samples.docToText(RS.samples.tamperedDoc());
+      markReady();
+    });
+
+    /* run / reset */
+    $('#btnRun').addEventListener('click', run);
+    $('#btnReset').addEventListener('click', () => {
+      if (state.file && state.file.url) URL.revokeObjectURL(state.file.url);
+      state.file = null; state.canvas = null; state.ocr = null;
+      state.receipt = state.math = state.visual = state.suspicious = state.report = null;
+      state.truth = null;
+      $('#fileInput').value = '';
+      $('#textInput').value = '';
+      renderDropzone();
+      $('#sampleNote').hidden = true;
+      $('#results').hidden = true;
+      $('#btnReset').hidden = true;
+      resetStages();
+      setTag('idle');
+      hideBanner();
+      markReady();
+      $('#detector').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    $('#textInput').addEventListener('input', markReady);
+
+    /* tabs */
+    $$('.tab').forEach((t) => t.addEventListener('click', () => selectTab(t.dataset.tab)));
+
+    /* filters */
+    $$('.filters .chip').forEach((c) => c.addEventListener('click', () => {
+      state.filter = c.dataset.filter;
+      $$('.filters .chip').forEach((x) => x.classList.toggle('is-active', x === c));
+      renderFindings();
+    }));
+
+    /* region deep-link */
+    $('#findingsList').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-region]');
+      if (!b) return;
+      selectTab('visual');
+      const row = $('#tblRegions tbody').querySelector('tr:nth-child(' + b.dataset.region + ')');
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.style.transition = 'background .3s';
+        row.style.background = 'rgba(244,83,106,.16)';
+        setTimeout(() => { row.style.background = ''; }, 1600);
+      }
+    });
+
+    /* visual toggles */
+    const bind = (id, key) => {
+      const box = $('#' + id);
+      box.checked = state.view[key];
+      box.addEventListener('change', () => { state.view[key] = box.checked; drawVisual(); });
+    };
+    bind('tglBoxes', 'regions');
+    bind('tglHeat', 'heat');
+    bind('tglText', 'text');
+    bind('tglAmp', 'amp');
+
+    /* zoom */
+    const dlg = document.createElement('dialog');
+    dlg.className = 'zoom';
+    dlg.innerHTML = '<button class="zoom__close" type="button" aria-label="Close">Close</button><img alt="Enlarged receipt view" />';
+    document.body.appendChild(dlg);
+    dlg.addEventListener('click', (e) => { if (e.target !== dlg.querySelector('img')) dlg.close(); });
+    $$('.viewer canvas').forEach((c) => {
+      c.style.cursor = 'zoom-in';
+      c.addEventListener('click', () => {
+        const img = dlg.querySelector('img');
+        img.src = c.toDataURL('image/png');
+        dlg.showModal();
+      });
+    });
+
+    /* json */
+    $('#btnCopyJson').addEventListener('click', async () => {
+      const btn = $('#btnCopyJson');
+      try {
+        await navigator.clipboard.writeText($('#jsonOut').textContent);
+        btn.textContent = 'Copied';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 1400);
+      } catch (err) {
+        showBanner('warn', 'Clipboard access was blocked by the browser. Select the JSON and copy it manually.');
+      }
+    });
+    $('#btnDownloadJson').addEventListener('click', () => {
+      if (!state.report) return;
+      const blob = new Blob([JSON.stringify(state.report, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'receiptshield-report-' + new Date(state.report.generatedAt).toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    });
+  }
+
+  /* ── hero flourish ───────────────────────────────────────── */
+  function startHero() {
+    const amt = $('#heroAmount');
+    if (!amt) return;
+    setTimeout(() => {
+      amt.style.transition = 'color .4s, text-shadow .4s';
+      amt.textContent = '₹1,500.00';
+      amt.style.color = '#f4536a';
+      amt.style.textShadow = '0 0 18px rgba(244,83,106,.55)';
+    }, 1400);
+  }
+
+  /* ── boot ────────────────────────────────────────────────── */
+  function init() {
+    wire();
+    startHero();
+    const dv = $('#dialValue');
+    dv.style.strokeDasharray = DIAL_C;
+    dv.style.strokeDashoffset = DIAL_C;
+    renderDropzone();
+    markReady();
+    if (!RS.ocr.available()) {
+      showBanner('warn',
+        '<strong>The OCR engine did not load from the CDN.</strong> Image analysis is unavailable, but you can still switch to <strong>Paste text</strong> mode and run the validation engine on receipt text.');
+    }
+    setTag('idle');
+    RS.app = { state, run, paint };
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})(window);
+</script>
+</body>
+</html>

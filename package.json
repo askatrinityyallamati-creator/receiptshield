@@ -1,0 +1,15 @@
+{
+  "name": "receiptshield",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-based receipt fraud & tampering detection: OCR extraction, mathematical validation and image-based tampering analysis, entirely in the browser.",
+  "keywords": ["receipt", "fraud-detection", "tampering", "ocr", "forensics", "ela", "expense-audit"],
+  "license": "MIT",
+  "scripts": {
+    "start": "node tools/serve.js",
+    "serve": "node tools/serve.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

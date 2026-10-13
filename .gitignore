@@ -1,0 +1,13 @@
+# local development artefacts
+.dev/
+node_modules/
+*.log
+
+# packaged build output
+*.zip
+
+# editor / OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
